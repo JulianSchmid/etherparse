@@ -1002,10 +1002,10 @@ mod test {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.handshake().send(Initiator, b"abc");
             let mut syn = script.segments[0].clone();
-            syn.header.sequence_number = script.seq(Initiator, 2);
-            // (a segment of the stream that started exactly where the kept
-            // SYN's bytes end would be kept with it as a reconnect's, C2)
-            syn.payload = b"xy".to_vec();
+            // (the segments of the stream within an initial window after a
+            // kept SYN would be kept with it as a reconnect's, C2)
+            syn.header.sequence_number = script.seq(Initiator, 2) + (1 << 20);
+            syn.payload = b"xyz".to_vec();
             script.segments.push(syn);
             script
                 .send(Initiator, b"def")
@@ -1209,17 +1209,10 @@ mod test {
 
         // ... the responder's first bytes, captured between the kept SYN-ACK
         // and the SYN (the initiator's direction lags), are kept with the
-        // SYN-ACK and reach the reconnect, up to the smaller of the fallback
-        // window and the stream buffer limit
-        for (fallback_window, order, expected) in [
-            (4 * 1024 * 1024, [1, 2, 0, 3, 4], &b"bannernext"[..]),
-            (8, [1, 2, 4, 0, 3], b"banner"),
-        ] {
-            let config = TcpReassemblyConfig {
-                fallback_window,
-                ..Default::default()
-            };
-            let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+        // SYN-ACK and reach the reconnect, whether the rest follows the SYN
+        // or is captured before it too
+        for order in [[1, 2, 0, 3, 4], [1, 2, 4, 0, 3]] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 5000);
             old.handshake();
             old.feed_all(&mut pool);
@@ -1248,7 +1241,35 @@ mod test {
             assert_eq!(Some(2_000_000_000), connection.stream(Initiator).isn());
             let stream = connection.stream_mut(Responder);
             assert_eq!(Some(3_000_000_000), stream.isn());
-            assert_eq!(TcpRead::Data(expected), stream.read_received());
+            assert_eq!(TcpRead::Data(b"bannernext"), stream.read_received());
+        }
+
+        // ... at most an initial window (64 KiB, headers included) is kept
+        // with the SYN-ACK: of 46 segments of 1448 bytes captured before the
+        // SYN, 44 reach the reconnect, the other two count as out-of-window
+        // in the old connection
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2_000_000_000, 3_000_000_000);
+            script.syn().syn_ack();
+            for _ in 0..46 {
+                script.send(Responder, &[b'x'; 1448]);
+            }
+            script.segments[1].feed(&mut pool, 7);
+            for segment in &script.segments[2..] {
+                let (connection, _) = segment.feed(&mut pool, 8).active.unwrap();
+                assert_eq!(TcpConnectionId(0), connection.id());
+            }
+            let processed = script.segments[0].feed(&mut pool, 9);
+            let ended = processed.ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Reconnect), ended.end());
+            assert_eq!(2, ended.stream(Responder).status().out_of_window_segments);
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(44 * 1448, connection.stream(Responder).highest_offset());
         }
 
         // ... in the other order, the initiator's ACK and request, captured
@@ -1293,6 +1314,82 @@ mod test {
             );
             let (connection, _) = script.segments[4].feed(&mut pool, 9).active.unwrap();
             assert_eq!(3, connection.stream(Initiator).acked_offset());
+        }
+
+        // ... the segments kept with the SYN are replayed as they were, so a
+        // hole between them, their windows and a FIN among them count in the
+        // reconnect: a lost segment between `abc` and `ghi` is a hole of the
+        // reconnect; the request's window (65535, the SYN said 1024) lets
+        // the response jump ahead by more than two SYN windows; a FIN with
+        // the request ends the reconnect once both FINs are ACKed
+        for scenario in ["hole", "window", "fin"] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake().send(Initiator, b"old");
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(70_000, 9000);
+            script.syn().syn_ack();
+            match scenario {
+                "hole" => {
+                    script
+                        .send(Initiator, b"abc")
+                        .send(Initiator, b"def")
+                        .send(Initiator, b"ghi");
+                }
+                "window" => {
+                    script.segments[0].header.window_size = 1024;
+                    script.send(Initiator, b"req");
+                    script.segments[2].header.window_size = 65535;
+                }
+                _ => {
+                    script.fin_with_data(Initiator, b"req");
+                }
+            }
+            let early: &[usize] = if "hole" == scenario {
+                &[0, 2, 4]
+            } else {
+                &[0, 2]
+            };
+            for index in early {
+                let (connection, _) = script.segments[*index].feed(&mut pool, 7).active.unwrap();
+                assert_eq!(TcpConnectionId(0), connection.id());
+                assert_eq!(3, connection.stream(Initiator).highest_offset());
+            }
+            let processed = script.segments[1].feed(&mut pool, 8);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            match scenario {
+                "hole" => {
+                    let stream = connection.stream_mut(Initiator);
+                    assert_eq!(9, stream.highest_offset());
+                    assert_eq!(vec![3..6], stream.holes().collect::<Vec<_>>());
+                    assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                }
+                "window" => {
+                    let late = script.injected(|s| {
+                        s.send_at(Responder, 3000, &[b'x'; 1000]);
+                    });
+                    let (connection, _) = late.feed(&mut pool, 9).active.unwrap();
+                    let stream = connection.stream(Responder);
+                    assert_eq!(4000, stream.highest_offset());
+                    assert_eq!(0, stream.status().out_of_window_segments);
+                }
+                _ => {
+                    assert_eq!(Some(3), connection.stream(Initiator).fin_offset());
+                    script.fin_with_data(Responder, b"ok").ack(Initiator);
+                    script.segments[3].feed(&mut pool, 9);
+                    let mut connection = script.segments[4].feed(&mut pool, 10).ended.unwrap();
+                    assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+                    let stream = connection.stream_mut(Initiator);
+                    assert_eq!(TcpRead::Data(b"req"), stream.read_received());
+                    stream.consume(3);
+                    assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+                }
+            }
         }
 
         // ... a kept SYN-ACK is confirmed only by the SYN it answers or a

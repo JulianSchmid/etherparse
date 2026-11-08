@@ -61,6 +61,9 @@ pub(crate) struct ReferenceModel {
     /// Whether the kept SYN or SYN-ACK lies where its stream's own late one
     /// could (C4): no segment is kept with it then.
     reconnect_syn_maybe_own: bool,
+    /// Segments of the reconnect kept with the SYN or SYN-ACK, replayed
+    /// after it.
+    reconnect_retained: Vec<TestSegment>,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -1142,14 +1145,15 @@ fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
 /// Returns true if the SYN `segment` retransmits the SYN `syn` of the same
 /// script: it comes from the same endpoint, without the ACK flag.
 /// Returns true if `segment` continues the kept SYN or SYN-ACK `syn` of the
-/// same script right away: it comes from the same endpoint with an ACK and
-/// starts where the kept bytes end (C2).
+/// same script: it comes from the same endpoint with an ACK and starts within
+/// an initial window after the kept bytes (C2).
 fn continues(syn: &TestSegment, segment: &TestSegment) -> bool {
+    let end = syn.offset + syn.payload.len() as u64;
     segment.header.ack
         && false == (segment.header.syn || segment.header.rst)
         && syn.incarnation == segment.incarnation
         && syn.sender == segment.sender
-        && segment.offset == syn.offset + syn.payload.len() as u64
+        && (end..end + 64 * 1024).contains(&segment.offset)
 }
 
 fn retransmits_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
@@ -1225,11 +1229,16 @@ impl ReferenceModel {
                 acks_syn(segment, syn) || retransmits_syn(segment, syn) || acks_syn(syn, segment)
             });
             let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
+            let retained = core::mem::take(&mut self.reconnect_retained);
             let next = self.next_connection();
             let mut replaced = core::mem::replace(self, next);
             if let Some(syn) = syn {
                 self.apply(&syn);
                 self.streams[role_index(syn.sender)].conflicting_retransmissions += conflicting;
+                // the segments kept with the SYN follow it
+                for kept in &retained {
+                    self.apply(kept);
+                }
             }
             self.apply(segment);
             if replaced.end.is_some() {
@@ -1310,12 +1319,17 @@ impl ReferenceModel {
             }
         }
         if continuation {
-            if let Some(syn) = self.reconnect_syn.as_mut() {
-                let limit =
-                    (self.config.fallback_window as usize).min(self.config.max_stream_buffer);
-                if syn.payload.len() + segment.payload.len() <= limit {
-                    syn.payload.extend_from_slice(&segment.payload);
-                }
+            // at most an initial window of bytes is kept, headers included
+            // (the pool counts each header with 20 bytes plus the length)
+            let kept: usize = self
+                .reconnect_retained
+                .iter()
+                .map(|kept| kept.payload.len() + 24)
+                .sum();
+            if kept + segment.payload.len() + 24 <= 64 * 1024 {
+                self.reconnect_retained.push(segment.clone());
+            } else {
+                self.streams[sender].out_of_window_segments += 1;
             }
         } else if dropped {
             self.streams[sender].out_of_window_segments += 1;
@@ -1358,6 +1372,7 @@ impl ReferenceModel {
                 self.reconnect_syn_maybe_own = self.is_own_syn(segment);
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
+                self.reconnect_retained.clear();
             } else if self
                 .reconnect_syn
                 .as_ref()
@@ -1369,6 +1384,7 @@ impl ReferenceModel {
                 self.reconnect_syn_maybe_own = self.is_own_syn(segment);
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
+                self.reconnect_retained.clear();
             }
         } else {
             self.apply_own_segment(segment, &mut available);

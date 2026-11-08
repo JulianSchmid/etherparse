@@ -22,8 +22,8 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// until a SYN-ACK of the other endpoint confirms the reconnect it
     /// starts or the simultaneous open it is part of; or a SYN-ACK with a
     /// new ISN captured before its SYN, kept until that SYN confirms the
-    /// reconnect (C2). The first bytes of the reconnect that follow it are
-    /// kept with it. `None` without one. A tombstone keeps the one its
+    /// reconnect (C2). The segments of the reconnect that follow it are kept
+    /// with it. `None` without one. A tombstone keeps the one its
     /// connection kept.
     reconnect_syn: Option<ReconnectSyn<Timestamp>>,
     /// Bytes the streams buffered when the pool last accounted for them.
@@ -183,8 +183,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             }
             Verdict::Reset => self.add_reset(sender, tcp, config),
             Verdict::Continuation => {
-                if let Some(kept) = self.reconnect_syn.as_mut() {
-                    kept.add_continuation(tcp, config);
+                let kept = self
+                    .reconnect_syn
+                    .as_mut()
+                    .is_some_and(|kept| kept.retain(tcp));
+                if false == kept {
+                    self.stream_mut(sender).count_out_of_window();
                 }
             }
             Verdict::KeepSyn {
@@ -634,6 +638,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             conflicting: 0,
             maybe_blind,
             maybe_own,
+            syn_len: segment.len(),
             segment,
         });
     }
@@ -658,7 +663,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Applies the kept SYN or SYN-ACK `syn` of a reconnect as the
-    /// connection's first packet, storing at most `available` more bytes.
+    /// connection's first packet, followed by the segments kept with it,
+    /// storing at most `available` more bytes.
     pub(crate) fn add_reconnect_syn(
         &mut self,
         syn: &ReconnectSyn<Timestamp>,
@@ -674,6 +680,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             // retransmissions of the SYN carried differing bytes
             self.stream_mut(sender)
                 .count_conflicting_retransmissions(syn.conflicting);
+            // the segments captured between the halves of the handshake
+            for retained in syn.retained() {
+                let timestamp = syn.timestamp.clone();
+                self.add_segment(syn.source, &retained, timestamp, config, available, free);
+            }
         }
     }
 
@@ -815,8 +826,9 @@ enum Verdict {
     /// one is dropped with it).
     Reset,
     /// A segment that continues the kept SYN or SYN-ACK: the first bytes of
-    /// the reconnect, captured between the halves of its handshake. They are
-    /// kept with it and touch no stream of this connection (C2).
+    /// the reconnect, captured between the halves of its handshake. It is
+    /// kept with it, to be replayed into the reconnect, and touches no
+    /// stream of this connection (C2).
     Continuation,
     /// A SYN without ACK that is not its stream's own (a new ISN, or one its
     /// mid-stream pickup can't take anymore, C4), or that may be blind
@@ -841,7 +853,9 @@ enum Verdict {
 /// SYN that is not its stream's own, kept until a SYN-ACK of the other
 /// endpoint confirms the reconnect it starts or the simultaneous open it is
 /// part of; or such a SYN-ACK captured before its SYN, kept until that SYN
-/// arrives (C2).
+/// arrives (C2). The segments of its sender that follow it before the
+/// confirmation (the reconnect's first bytes, captured between the halves
+/// of its handshake) are kept with it and replayed into the reconnect.
 #[derive(Clone, Debug)]
 pub(crate) struct ReconnectSyn<Timestamp> {
     /// Endpoint that sent the SYN.
@@ -853,8 +867,7 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     /// ACK number, if the kept segment is a SYN-ACK.
     ack: Option<u32>,
     /// Number of bytes the SYN carries (TCP Fast Open), with the ones its
-    /// retransmissions added, or that a kept SYN-ACK carries with the bytes
-    /// of its sender that continued it.
+    /// retransmissions added.
     payload_len: usize,
     /// Number of retransmissions of the SYN that carried bytes differing
     /// from the ones received first.
@@ -868,9 +881,19 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     /// the segments that continue it may then be the stream's own early
     /// bytes, so none are kept with it.
     maybe_own: bool,
-    /// TCP header and payload of the SYN, replayed if it starts a reconnect.
+    /// TCP header and payload of the SYN, replayed if it starts a reconnect,
+    /// followed by the segments kept with it, each with its length in front
+    /// (see [`ReconnectSyn::retained`]).
     segment: Vec<u8>,
+    /// Length of the SYN in `segment`.
+    syn_len: usize,
 }
+
+/// Range after the kept bytes of a SYN or SYN-ACK in which the segments of
+/// its sender are kept with it, and the most bytes kept with it: an initial
+/// window, as the sender can't have more in flight before the handshake's
+/// answer (C2).
+const RETAINED_RANGE: usize = 64 * 1024;
 
 impl<Timestamp> ReconnectSyn<Timestamp> {
     /// Timestamp of the SYN.
@@ -913,10 +936,10 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
     }
 
     /// Returns true if the segment `tcp`, sent by `source`, continues the
-    /// kept SYN or SYN-ACK right away: it comes from the same endpoint with
-    /// an ACK and starts where the kept bytes end, so it carries the first
-    /// bytes of the reconnect, captured between the halves of its handshake
-    /// (C2).
+    /// kept SYN or SYN-ACK: it comes from the same endpoint with an ACK and
+    /// starts within an initial window after the kept bytes, so it carries
+    /// the first bytes of the reconnect, captured between the halves of its
+    /// handshake (C2).
     pub fn continues(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let next = self
             .isn
@@ -925,33 +948,47 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
         source == self.source
             && tcp.ack()
             && false == (tcp.syn() || tcp.rst())
-            && tcp.sequence_number() == next
+            && (tcp.sequence_number().wrapping_sub(next) as usize) < RETAINED_RANGE
     }
 
-    /// Keeps the bytes of the segment `tcp`, which continues the kept SYN
-    /// or SYN-ACK (see [`ReconnectSyn::continues`]), with it, as its bytes.
-    /// At most the smaller of the fallback window and the stream buffer
-    /// limit is kept.
-    fn add_continuation(&mut self, tcp: &TcpSlice<'_>, config: &TcpReassemblyConfig) {
-        let payload = tcp.payload();
-        let limit = (config.fallback_window as usize).min(config.max_stream_buffer);
-        if self.payload_len + payload.len() <= limit {
-            self.segment.extend_from_slice(payload);
-            self.payload_len += payload.len();
+    /// Keeps the segment `tcp`, which continues the kept SYN or SYN-ACK (see
+    /// [`ReconnectSyn::continues`]), with it, to replay it into the
+    /// reconnect. Returns false if it doesn't fit the initial window kept.
+    fn retain(&mut self, tcp: &TcpSlice<'_>) -> bool {
+        let bytes = tcp.slice();
+        if self.segment.len() - self.syn_len + bytes.len() + 4 > RETAINED_RANGE {
+            return false;
         }
+        self.segment
+            .extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        self.segment.extend_from_slice(bytes);
+        true
+    }
+
+    /// The segments kept with the SYN, in the order they arrived.
+    fn retained(&self) -> impl Iterator<Item = TcpSlice<'_>> {
+        let mut rest = &self.segment[self.syn_len..];
+        core::iter::from_fn(move || {
+            let len = u32::from_le_bytes(rest.get(..4)?.try_into().ok()?) as usize;
+            let bytes = rest.get(4..4 + len)?;
+            rest = &rest[4 + len..];
+            TcpSlice::from_slice(bytes).ok()
+        })
     }
 
     /// Takes the TCP Fast Open bytes that the `payload` of a retransmission
     /// of the SYN adds beyond the kept ones. The bytes received first stay,
     /// and differing bytes count as a conflicting retransmission.
     fn add_retransmission(&mut self, payload: &[u8]) {
-        let kept = &self.segment[self.segment.len() - self.payload_len..];
+        let kept = &self.segment[self.syn_len - self.payload_len..self.syn_len];
         let overlap = kept.len().min(payload.len());
         if kept[..overlap] != payload[..overlap] {
             self.conflicting += 1;
         }
         if let Some(added) = payload.get(overlap..) {
-            self.segment.extend_from_slice(added);
+            self.segment
+                .splice(self.syn_len..self.syn_len, added.iter().copied());
+            self.syn_len += added.len();
             self.payload_len += added.len();
         }
     }
@@ -963,7 +1000,7 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
 
     /// The SYN (`None` can't happen, as its bytes come from a TCP slice).
     fn tcp(&self) -> Option<TcpSlice<'_>> {
-        TcpSlice::from_slice(&self.segment).ok()
+        TcpSlice::from_slice(&self.segment[..self.syn_len]).ok()
     }
 }
 

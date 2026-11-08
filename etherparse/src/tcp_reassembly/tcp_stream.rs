@@ -6917,7 +6917,9 @@ mod test {
         }
 
         // ... and neither does a SYN with another ISN after the SYN-ACK
-        // started the stream
+        // started the stream (one far from the stream: the segments of the
+        // stream within an initial window after a kept SYN are kept with it
+        // as a reconnect's, C2)
         {
             let config = TcpReassemblyConfig {
                 fallback_window: 50,
@@ -6927,7 +6929,7 @@ mod test {
             script.window_scales = [Some(3), Some(3)];
             script.window_size = 100;
             script.handshake().ack(Responder);
-            script.segments[0].header.sequence_number += 7;
+            script.segments[0].header.sequence_number += 1 << 20;
             script.segments.swap(0, 1);
             assert_window_end(config, &script, 100);
         }
