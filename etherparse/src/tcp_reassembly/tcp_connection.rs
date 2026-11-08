@@ -612,31 +612,31 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             .unwrap_or(u64::from(config.fallback_window))
     }
 
-    /// Remembers the sequence numbers of the connection whose tombstone is
-    /// `replaced`, which this one replaced (C2), to absorb its late
-    /// segments (C1). The connection that one replaced in turn is
-    /// forgotten: a late duplicate from two reconnects back starts a new
-    /// connection.
-    pub(crate) fn remember_replaced(&mut self, replaced: Tombstone<Timestamp>) {
-        self.replaced = Some(replaced.seqs);
+    /// Remembers the sequence numbers `replaced` of the connection this one
+    /// replaced (C2), to absorb its late segments (C1). The connection that
+    /// one replaced in turn is forgotten: a late duplicate from two
+    /// reconnects back starts a new connection.
+    pub(crate) fn remember_replaced(&mut self, replaced: SeqNumbers) {
+        self.replaced = Some(replaced);
     }
 
     /// Returns true if `tcp`, sent by `source`, is a late segment of the
     /// connection this one replaced (C1), which the pool ignores like a
-    /// segment on a tombstone: a duplicate of its handshake, or, while a
-    /// stream of this connection has no start yet, a segment without bytes
-    /// at the sequence number a replaced stream reached (the ACK of a
-    /// server in TIME-WAIT to a new SYN with a lower ISN, the client's RST
-    /// to that ACK, or the old close's last ACK captured late).
+    /// segment on a tombstone: a duplicate of its handshake, or, while the
+    /// sender sent nothing after its SYN in this connection, a segment of
+    /// the replaced connection by its sequence numbers (see
+    /// [`SeqNumbers::absorbs_late`]): the ACK of a server in TIME-WAIT to
+    /// a new SYN with a lower ISN, the client's RST to that ACK, the old
+    /// close's last ACK captured late, or bytes still in flight.
     pub(crate) fn absorbs_late_segment(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        let sent_nothing = self.stream(self.role(source)).sent_nothing();
         let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if tcp.syn() {
             return false == tcp.rst() && replaced.is_own_handshake(source, tcp);
         }
-        false == (self.initiator_stream.has_start() && self.responder_stream.has_start())
-            && replaced.absorbs_end(source, tcp)
+        sent_nothing && replaced.absorbs_late(source, tcp)
     }
 
     /// What the pool keeps of the connection once it ended.
@@ -645,16 +645,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         Timestamp: Clone,
     {
         Tombstone {
-            seqs: SeqNumbers {
-                initiator: self.initiator,
-                syns: [self.initiator_stream.syn(), self.responder_stream.syn()],
-                next: [
-                    self.initiator_stream.next_seq(),
-                    self.responder_stream.next_seq(),
-                ],
-            },
+            seqs: self.seq_numbers(),
             replaced: self.replaced.clone(),
             last_seen: self.last_seen.clone(),
+        }
+    }
+
+    /// Sequence numbers that tell the connection's late segments from a
+    /// reconnect's once it ended (C1).
+    pub(crate) fn seq_numbers(&self) -> SeqNumbers {
+        let streams = [&self.initiator_stream, &self.responder_stream];
+        SeqNumbers {
+            initiator: self.initiator,
+            syns: streams.map(TcpStream::syn),
+            first: streams.map(TcpStream::first_seq),
+            next: streams.map(TcpStream::next_seq),
         }
     }
 
@@ -708,6 +713,12 @@ pub(crate) struct Tombstone<Timestamp> {
 }
 
 impl<Timestamp> Tombstone<Timestamp> {
+    /// Sequence numbers of the ended connection, for the reconnect that
+    /// starts on the tombstone.
+    pub fn into_seqs(self) -> SeqNumbers {
+        self.seqs
+    }
+
     /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
     /// to the handshake of the ended connection or of the one it replaced
     /// (see [`SeqNumbers::is_own_handshake`]).
@@ -722,13 +733,16 @@ impl<Timestamp> Tombstone<Timestamp> {
 
 /// Sequence numbers of a connection that tell its late segments from a
 /// reconnect's once it ended (C1): the observed SYNs of its streams and the
-/// sequence numbers they reached.
+/// sequence numbers each stream covered.
 #[derive(Clone, Debug)]
 pub(crate) struct SeqNumbers {
     /// Endpoint that initiated the connection.
     initiator: SocketAddr,
     /// SYNs of the initiator's and the responder's stream, if observed.
     syns: [Option<ObservedSyn>; 2],
+    /// Sequence number of each stream's first byte (see
+    /// [`TcpStream::first_seq`]).
+    first: [Option<u32>; 2],
     /// Sequence number each stream's sender sends next, as far as the stream
     /// knew (see [`TcpStream::next_seq`]).
     next: [Option<u32>; 2],
@@ -750,18 +764,23 @@ impl SeqNumbers {
             && self.syns[other].is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
     }
 
-    /// Returns true if `tcp`, sent by `source`, is a segment without SYN and
-    /// bytes at the sequence number the sender's stream reached: a late ACK
-    /// or RST of the ended connection. The ACK number of such an ACK moves
-    /// the number the other stream reached forward: the capture may have
-    /// missed that stream's FIN, and the RST that answers the ACK lies at
-    /// the ACK number (RFC 9293 3.10.7.3).
-    pub fn absorbs_end(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+    /// Returns true if `tcp`, sent by `source` and no SYN, is a late segment
+    /// of the ended connection by its sequence numbers: it lies within the
+    /// numbers its sender's stream covered (from its first byte to the
+    /// number it reached) and its ACK number, if it has one, within the
+    /// other stream's, or it has no bytes and lies right at the number its
+    /// sender's stream reached (a late ACK or RST, also when the other
+    /// stream is unknown). The ACK number of such an ACK moves the number
+    /// the other stream reached forward: the capture may have missed that
+    /// stream's FIN, and the RST that answers the ACK lies at the ACK
+    /// number (RFC 9293 3.10.7.3).
+    pub fn absorbs_late(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = self.roles(source);
-        if tcp.syn()
-            || false == tcp.payload().is_empty()
-            || Some(tcp.sequence_number()) != self.next[own]
-        {
+        let seq = tcp.sequence_number();
+        let at_end = tcp.payload().is_empty() && Some(seq) == self.next[own];
+        let within = self.covers(own, seq)
+            && (false == tcp.ack() || self.covers(other, tcp.acknowledgment_number()));
+        if tcp.syn() || false == (at_end || within) {
             return false;
         }
         if tcp.ack() && false == tcp.rst() {
@@ -771,6 +790,15 @@ impl SeqNumbers {
             }
         }
         true
+    }
+
+    /// Returns true if the stream with the index `stream` covered the
+    /// sequence number `seq`: from its first byte to the number it reached.
+    fn covers(&self, stream: usize, seq: u32) -> bool {
+        match (self.first[stream], self.next[stream]) {
+            (Some(first), Some(next)) => seq.wrapping_sub(first) <= next.wrapping_sub(first),
+            _ => false,
+        }
     }
 
     /// Indices of the stream of `source` and of the other stream.
@@ -963,7 +991,13 @@ mod test {
         for (initiator, responder) in cases {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::new(initiator, responder, 1000, 2000);
-            script.handshake();
+            // the pool can't tell the segments of a connection to itself
+            // apart, so only its SYN is fed
+            if initiator == responder {
+                script.syn();
+            } else {
+                script.handshake();
+            }
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(initiator, connection.endpoint(Initiator));
             assert_eq!(responder, connection.endpoint(Responder));
@@ -1387,11 +1421,11 @@ mod test {
             );
         }
 
-        // late segments of a connection that a reconnect replaced don't ACK
-        // the new SYN: a late RST at the old stream's end is the replaced
-        // connection's (C1), while one from within the old bytes doesn't
-        // reset the new connection, and late bytes don't start its responder
-        // stream
+        // late segments of a connection that a reconnect replaced neither
+        // ACK the new SYN nor reset the new connection nor start its
+        // responder stream: while the responder sent nothing in the new
+        // connection, the old connection's sequence numbers show they are
+        // its (C1), and a segment far outside them is dropped (S5)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 2000);
@@ -1403,13 +1437,10 @@ mod test {
             let mut new = ConnectionScript::with_isns(5000, 6000);
             new.syn();
             new.feed_all(&mut pool);
-            let processed = old
-                .injected(|s| {
-                    s.rst_at(Responder, 9);
-                })
-                .feed(&mut pool, ());
-            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             for late in [
+                old.injected(|s| {
+                    s.rst_at(Responder, 9);
+                }),
                 old.injected(|s| {
                     s.rst_at(Responder, 5);
                 }),
@@ -1418,11 +1449,21 @@ mod test {
                 }),
             ] {
                 let processed = late.feed(&mut pool, ());
-                assert_eq!(None, processed.ignored);
-                let (connection, _) = processed.active.unwrap();
-                assert_eq!(TcpConnectionId(1), connection.id());
-                assert_eq!(None, connection.end());
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             }
+            let mut far = old.injected(|s| {
+                s.send_at(Responder, 0, b"far");
+            });
+            far.header.sequence_number = 3_000_000_000;
+            let processed = far.feed(&mut pool, ());
+            assert_eq!(None, processed.ignored);
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(None, connection.end());
+            assert_eq!(
+                1,
+                connection.stream(Responder).status().out_of_window_segments
+            );
             new.syn_ack()
                 .ack(Initiator)
                 .send(Initiator, b"request")
@@ -1431,7 +1472,7 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(TcpStreamStart::Observed, stream.status().start);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
-            assert_eq!(2, stream.status().out_of_window_segments);
+            assert_eq!(1, stream.status().out_of_window_segments);
         }
 
         // a late SYN-ACK whose ACK number a mid-stream pickup can't take as

@@ -509,6 +509,18 @@ impl TcpStream {
         }
     }
 
+    /// Sequence number of the stream's first byte (offset 0); `None` without
+    /// a start.
+    pub(crate) fn first_seq(&self) -> Option<u32> {
+        self.start_seq
+    }
+
+    /// Returns true if the stream's sender sent nothing yet, apart from its
+    /// SYN: the stream has no start, or no bytes and no FIN.
+    pub(crate) fn sent_nothing(&self) -> bool {
+        self.start_seq.is_none() || (0 == self.highest_offset() && self.fin_offset.is_none())
+    }
+
     /// Sequence number the stream's sender sends next, as far as the stream
     /// knows: the one after its highest byte, or after its FIN; `None`
     /// without a start.
