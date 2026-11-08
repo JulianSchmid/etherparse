@@ -2878,6 +2878,33 @@ mod test {
             );
         }
 
+        // an RST that ACKs the SYN drops a kept ACK even if that ACK allows
+        // the RST, as F4 measures the RST from the kept ACK: the closed
+        // port's RST/ACK at sequence number 0 resets the connection after a
+        // blind ACK from the initiator's address kept 5 for the responder
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 0xffff_ffff);
+            script.syn();
+            let mut blind = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind.header.sequence_number = 0x9000_0000;
+            blind.header.acknowledgment_number = 5;
+            script.segments.push(blind);
+            let mut rst = script.injected(|s| {
+                s.rst_at(Responder, 0);
+            });
+            rst.header.sequence_number = 0;
+            rst.header.acknowledgment_number = 1001;
+            script.segments.push(rst);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                connection.end()
+            );
+        }
+
         // an RST answers a SYN only if it ACKs the SYN itself, like a
         // SYN-ACK: one that ACKs a byte after it is dropped (a receiver in
         // SYN-SENT accepts only an RST that ACKs its SYN, F4)
