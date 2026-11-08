@@ -83,6 +83,9 @@ pub(crate) enum ReaderAction {
 /// Model of one stream.
 #[derive(Clone, Debug, Default)]
 struct ModelStream {
+    /// `max_stream_buffer`, which bounds how long the hole at the read
+    /// offset waits (K4(d)).
+    max_buffer: u64,
     /// Offset of the pool's offset 0 (`None` while the stream has no
     /// start).
     base: Option<u64>,
@@ -1139,18 +1142,16 @@ impl ModelStream {
             .map(|(_, ack)| *ack)
             .max()
             .unwrap_or(0);
-        // the hole at the read offset is overdue once the bytes from it fill
-        // half the buffer (K4(d))
-        let half = config.max_stream_buffer as u64 / 2;
-        if self.first_hole().is_some_and(|_| self.buffered() >= half) {
-            self.give_up_hole();
-        }
         self.give_up_overdue_hole();
     }
 
-    /// Gives up the hole at the read offset if it is overdue.
+    /// Gives up the hole at the read offset if it is overdue, or if the
+    /// bytes from it fill half the buffer (K4(d)).
     fn give_up_overdue_hole(&mut self) {
-        if self.first_hole().is_some_and(|hole| self.is_overdue(&hole)) {
+        if self
+            .first_hole()
+            .is_some_and(|hole| self.is_overdue(&hole) || self.buffered() >= self.max_buffer / 2)
+        {
             self.give_up_hole();
         }
     }
@@ -1347,7 +1348,12 @@ fn within_window(bytes: &Range<u64>, offset: u64, window: u64) -> bool {
 impl ReferenceModel {
     /// Model of a connection in a pool with the configuration `config`.
     pub fn new(config: TcpReassemblyConfig) -> ReferenceModel {
+        let stream = ModelStream {
+            max_buffer: config.max_stream_buffer as u64,
+            ..Default::default()
+        };
         ReferenceModel {
+            streams: [stream.clone(), stream],
             config,
             ..Default::default()
         }

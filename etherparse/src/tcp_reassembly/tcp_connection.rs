@@ -46,6 +46,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         initiator: SocketAddr,
         roles_guessed: bool,
         timestamp: Timestamp,
+        config: &TcpReassemblyConfig,
         free: &mut FreeBuffers,
     ) -> TcpConnection<Timestamp, CustomChannelId>
     where
@@ -56,8 +57,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             key,
             initiator,
             roles_guessed,
-            initiator_stream: TcpStream::new(free),
-            responder_stream: TcpStream::new(free),
+            initiator_stream: TcpStream::new(free, config),
+            responder_stream: TcpStream::new(free, config),
             first_seen: timestamp.clone(),
             last_seen: timestamp,
             end: None,

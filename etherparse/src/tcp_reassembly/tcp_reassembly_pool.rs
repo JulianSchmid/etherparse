@@ -182,6 +182,7 @@ where
                     let reconnect = new_connection(
                         &mut self.next_id,
                         &mut self.free,
+                        &self.config,
                         entry.key().clone(),
                         handshake_initiator(&tcp, source, destination),
                         false,
@@ -207,6 +208,7 @@ where
                     let mut connection = new_connection(
                         &mut self.next_id,
                         &mut self.free,
+                        &self.config,
                         entry.key().clone(),
                         handshake_initiator(&tcp, source, destination),
                         false,
@@ -232,6 +234,7 @@ where
                     new_connection(
                         &mut self.next_id,
                         &mut self.free,
+                        &self.config,
                         entry.key().clone(),
                         initiator,
                         roles_guessed,
@@ -530,10 +533,12 @@ fn handshake_initiator(
 }
 
 /// Creates a connection with the id `next_id` (and moves `next_id` on),
-/// whose streams take their buffers from `free`.
+/// whose streams take their buffers from `free` and their limits from
+/// `config`.
 fn new_connection<Timestamp: Clone, CustomChannelId>(
     next_id: &mut TcpConnectionId,
     free: &mut FreeBuffers,
+    config: &TcpReassemblyConfig,
     key: TcpConnectionKey<CustomChannelId>,
     initiator: SocketAddr,
     roles_guessed: bool,
@@ -541,7 +546,7 @@ fn new_connection<Timestamp: Clone, CustomChannelId>(
 ) -> TcpConnection<Timestamp, CustomChannelId> {
     let id = *next_id;
     *next_id = TcpConnectionId(id.0.wrapping_add(1));
-    TcpConnection::new(id, key, initiator, roles_guessed, timestamp, free)
+    TcpConnection::new(id, key, initiator, roles_guessed, timestamp, config, free)
 }
 
 #[cfg(test)]
@@ -2165,6 +2170,58 @@ mod test {
             assert_eq!(vec![Some(gap)], gaps);
             assert_eq!(captured.len(), got.len());
             assert!(captured == got);
+        }
+
+        // the hole at the read position is overdue once half the buffer is
+        // filled from it, also when the read position reaches it (K4(d)): a
+        // reader that reads the received bytes only later, or only the ACKed
+        // ones as they come, gets a gap and the bytes after it (regression
+        // test: the check ran after packets only, and such a reader stalled)
+        for eager_acked in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // a window of 6 MiB, so the implied ACK lies far back
+            script.window_scales = [Some(7); 2];
+            script.window_size = 49152;
+            script
+                .handshake()
+                .send(Responder, b"a")
+                .send_uncaptured(Responder, 1000);
+            for _ in 0..71 {
+                script.send(Responder, &[b'x'; 60_000]);
+            }
+            script.ack(Initiator);
+            let (mut got, mut gaps) = (0, Vec::new());
+            let mut read = |stream: &mut TcpStream| loop {
+                let read = if eager_acked {
+                    stream.read_acked()
+                } else {
+                    stream.read_received()
+                };
+                match read {
+                    TcpRead::Data(data) => {
+                        let len = data.len();
+                        got += len;
+                        stream.consume(len);
+                    }
+                    TcpRead::Gap { len } => {
+                        gaps.push((got, len));
+                        stream.consume_gap();
+                    }
+                    _ => break,
+                }
+            };
+            // the late reader reads once, after the last packet, from the
+            // open connection
+            let last = script.segments.len() - 1;
+            for (i, segment) in script.segments.iter().enumerate() {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                if eager_acked || last == i {
+                    read(connection.stream_mut(Responder));
+                }
+            }
+            let expected = (71 * 60_000 + 1, vec![(1, Some(1000))]);
+            assert_eq!(expected, (got, gaps), "{eager_acked}");
         }
 
         // a reader stalled at a hole from capture loss gets past it before

@@ -17,6 +17,10 @@ use std::collections::VecDeque;
 /// [`TcpStream::force_resync`]).
 #[derive(Clone, Debug)]
 pub struct TcpStream {
+    /// `max_stream_buffer`, which bounds how long the hole at the read
+    /// position waits (K4(d)).
+    max_buffer: u64,
+
     /// Sequence number of the byte at offset 0 (`None` while the start of
     /// the stream is unknown).
     start_seq: Option<u32>,
@@ -160,8 +164,9 @@ pub struct TcpStream {
 impl TcpStream {
     /// Creates a stream whose start is not known yet, with buffers taken
     /// from `free`.
-    pub(crate) fn new(free: &mut FreeBuffers) -> TcpStream {
+    pub(crate) fn new(free: &mut FreeBuffers, config: &TcpReassemblyConfig) -> TcpStream {
         TcpStream {
+            max_buffer: config.max_stream_buffer as u64,
             start_seq: None,
             syn: None,
             kept_ack: None,
@@ -333,10 +338,12 @@ impl TcpStream {
     /// Gives up the hole at the read position if it is overdue: the
     /// receiver must have received its bytes, so they will most likely not
     /// be captured anymore (late segments still fill overdue holes the read
-    /// position hasn't reached).
+    /// position hasn't reached), or if the bytes from it fill half of the
+    /// buffer, as waiting longer can overflow the buffer and reject bytes
+    /// the capture showed (K4(d)).
     fn give_up_overdue_hole(&mut self) {
         if let Some(hole) = self.buffer.hole_at_read_offset() {
-            if self.is_overdue(&hole) {
+            if self.is_overdue(&hole) || self.buffer.buffered() as u64 >= self.max_buffer / 2 {
                 self.give_up_holes_before(hole.end);
             }
         }
@@ -1546,15 +1553,6 @@ impl TcpStream {
             // later holes lie after the seen ACK, so they can't be overdue
             // by the ACKs so far (a prepend adds a hole before it)
             self.recent_acks.clear();
-        }
-        // once the bytes from the hole at the read position fill half the
-        // stream's buffer, waiting longer for its bytes can overflow the
-        // buffer and reject bytes the capture showed (K4(d)): the waits of
-        // K2 and K4(b) count windows and packets, not the hole
-        if let Some(hole) = self.buffer.hole_at_read_offset() {
-            if self.buffer.buffered() as u64 >= config.max_stream_buffer as u64 / 2 {
-                self.give_up_holes_before(hole.end);
-            }
         }
         self.give_up_overdue_hole();
     }
