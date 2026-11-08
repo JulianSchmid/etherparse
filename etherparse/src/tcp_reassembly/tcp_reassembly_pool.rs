@@ -2167,6 +2167,74 @@ mod test {
             assert!(captured == got);
         }
 
+        // a reader stalled at a hole from capture loss gets past it before
+        // the stream's buffer is full: K2's implied ACK lies at most half
+        // the buffer behind the bytes, also with large segments (as captured
+        // on a host with GRO/TSO), in a capture of one direction and of both
+        // (regression test: with the implied ACK waiting
+        // `ack_reorder_tolerance` packets, the buffer overflowed, and bytes
+        // the capture showed were rejected as a second gap)
+        for (both, max_stream_buffer, len, segments) in [
+            (false, 256 * 1024, 1460, 600),
+            (true, 8 * 1024 * 1024, 60_000, 400),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // a window of 3 MiB after the SYNs
+            script.window_scales = [Some(6); 2];
+            script.window_size = 49152;
+            script.handshake();
+            let mut captured = Vec::new();
+            for i in 0..segments {
+                let data: Vec<u8> = (0..len).map(|j| ((i * 7 + j) % 251) as u8).collect();
+                script.send(Responder, &data);
+                if 100 == i {
+                    script.segments.pop();
+                } else {
+                    captured.extend_from_slice(&data);
+                }
+                if 1 == i % 2 {
+                    script.ack(Initiator);
+                }
+            }
+            script.fin(Responder);
+            let (mut got, mut gaps) = (Vec::new(), Vec::new());
+            let mut rejected = 0;
+            let shown = script
+                .segments
+                .iter()
+                .filter(|segment| both || Responder == segment.sender);
+            for segment in shown {
+                let Some((connection, _)) = segment.feed(&mut pool, 1).active else {
+                    continue;
+                };
+                let stream = connection.stream_mut(Responder);
+                loop {
+                    match stream.read_received() {
+                        TcpRead::Data(data) => {
+                            got.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            gaps.push(len);
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+                rejected = stream.status().rejected_bytes;
+            }
+            assert_eq!(0, rejected, "{both}");
+            assert_eq!(vec![Some(len as u64)], gaps, "{both}");
+            assert_eq!(captured.len(), got.len(), "{both}");
+            assert!(captured == got, "{both}");
+        }
+
         // a capture that lost a burst of more than k windows and an ACK in
         // it shows the next ACK two windows after the last one: it counts
         // (K1), so the burst is one gap of its length (regression test:
