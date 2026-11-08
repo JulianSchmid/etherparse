@@ -26,9 +26,11 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// replaced none.
     replaced: Option<SeqNumbers>,
     /// Whether the initiator and the responder sent a segment that the
-    /// connection didn't drop: on one path, an endpoint's late segments of
-    /// the connection this one replaced can't arrive after its first
-    /// segment of this one (C1).
+    /// connection took for theirs (applied, kept or ignored as their own
+    /// late SYN; not dropped, nor an RST that F4 refused, which can be a
+    /// late one): on one path, an endpoint's late segments of the
+    /// connection this one replaced can't arrive after its first segment of
+    /// this one (C1).
     sent: [bool; 2],
     /// Bytes the streams buffered when the pool last accounted for them.
     accounted: usize,
@@ -170,7 +172,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
         let verdict = self.verdict(sender, tcp, config, *available);
-        self.sent[sender.index()] |= Verdict::Dropped != verdict;
+        self.sent[sender.index()] |= matches!(
+            verdict,
+            Verdict::Applied | Verdict::KeepSyn | Verdict::Ignored
+        );
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
         if Verdict::Dropped != verdict

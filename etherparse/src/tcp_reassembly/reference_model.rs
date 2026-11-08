@@ -32,7 +32,7 @@ pub(crate) struct ReferenceModel {
     /// duplicates it absorbs (C1).
     replaced: Option<Box<ReferenceModel>>,
     /// Whether the initiator and the responder sent a segment that the
-    /// connection didn't drop (C1).
+    /// connection took for theirs: not dropped, nor an RST (C1).
     sent: [bool; 2],
     /// Endpoint of the initiator, once the connection was created (the
     /// roles of a segment follow its endpoints, as in the pool, not the
@@ -1394,7 +1394,6 @@ impl ReferenceModel {
                     bare,
                     same_script,
                 ));
-        self.sent[sender] |= false == dropped;
         // a mid-stream pickup refuses an own late SYN it can't take anymore:
         // it counts and changes nothing else (C4)
         let ignored = false == dropped
@@ -1408,6 +1407,9 @@ impl ReferenceModel {
                     &self.config,
                     available,
                 );
+        // an accepted RST ends the connection, a refused one can be a late
+        // one
+        self.sent[sender] |= false == (dropped || header.rst);
         if false == (dropped || ignored) {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
