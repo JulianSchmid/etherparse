@@ -84,9 +84,7 @@ pub struct TcpReassemblyConfig {
     /// Size it above the number of packets (of both directions) that a
     /// connection can show within the skew between the directions: 256
     /// packets are a few milliseconds of one connection at 1 Gbit/s. A hole
-    /// from real capture loss stalls a reader for this many packets. The
-    /// segments of a reconnect captured between the halves of its handshake
-    /// are kept for as many packets before they go to the old connection. An
+    /// from real capture loss stalls a reader for this many packets. An
     /// overdue hole is given up once the read position reaches it, and late
     /// segments fill it until then. While a stream has holes, or is a
     /// mid-stream pickup that was not read from yet, it keeps the ACKs of
@@ -119,10 +117,9 @@ pub struct TcpReassemblyConfig {
     /// (default `None`, no limit).
     ///
     /// Bytes beyond it are rejected, and reading makes room at once.
-    /// Connections handed over as ended don't count, and neither do the
-    /// SYNs kept for reconnects (see
-    /// [`crate::tcp_reassembly::TcpReassemblyPool::process_segment`]), of
-    /// which each connection keeps at most one. The memory of the streams
+    /// Connections handed over as ended don't count, and neither does the
+    /// SYN of a simultaneous open that a connection keeps until a SYN-ACK
+    /// confirms it (at most one per connection). The memory of the streams
     /// stays within about four times this limit, plus
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`] per stream, as a
     /// stream gives back the room of consumed bytes (see there).

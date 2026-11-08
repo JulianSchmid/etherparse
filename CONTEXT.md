@@ -25,7 +25,7 @@ A number, unique within a pool, that the pool assigns to each connection; a reco
 _Avoid_: connection key (the header fields), generation
 
 **Reconnect**:
-A new connection, started with a SYN, that reuses the connection key of an earlier connection.
+A new connection, started with a SYN or SYN-ACK with a new ISN, that reuses the connection key of an earlier connection and replaces it.
 _Avoid_: port reuse, restart
 
 **Ended connection**:

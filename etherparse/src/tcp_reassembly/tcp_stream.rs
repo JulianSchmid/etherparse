@@ -457,9 +457,9 @@ impl TcpStream {
     /// that ACKed the SYN's TCP Fast Open bytes, A2). Without an observed
     /// start, it has to lie at or before the stream's first byte, at most
     /// as far before it as earlier bytes could be put in front of it (the
-    /// A5 range, C4), whether the stream can still take it or not (see
-    /// [`TcpStream::can_take_syn`]). Without a start, the same holds for
-    /// the receiver's kept ACK, if there is one.
+    /// A5 range, C4), whether the stream can still take it or not (it
+    /// refuses and counts one it can't). Without a start, the same holds
+    /// for the receiver's kept ACK, if there is one.
     pub(crate) fn is_own_syn(
         &self,
         tcp: &TcpSlice<'_>,
@@ -476,20 +476,6 @@ impl TcpStream {
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
             (None, None) => self.kept_ack_allows_syn(seq, window, config),
         }
-    }
-
-    /// Returns true if the stream takes the SYN or SYN-ACK `tcp` of its
-    /// sender as its own (see [`TcpStream::is_own_syn`]): a mid-stream
-    /// pickup can't once bytes can no longer be put in front of it (A5), so
-    /// such a SYN is kept for a reconnect instead (C4).
-    pub(crate) fn can_take_syn(
-        &self,
-        tcp: &TcpSlice<'_>,
-        window: u64,
-        config: &TcpReassemblyConfig,
-    ) -> bool {
-        self.is_own_syn(tcp, window, config)
-            && (self.isn().is_some() || self.start_seq.is_none() || self.can_prepend())
     }
 
     /// Returns true if the receiver's kept ACK, if there is one, allows a
@@ -626,11 +612,6 @@ impl TcpStream {
     /// stream (see [`TcpStreamStatus::out_of_window_segments`]).
     pub(crate) fn count_out_of_window(&mut self) {
         self.status.out_of_window_segments += 1;
-    }
-
-    /// Counts `len` bytes of the stream's sender that the limits rejected.
-    pub(crate) fn count_rejected(&mut self, len: usize) {
-        self.status.rejected_bytes += len as u64;
     }
 
     /// Puts the stream's buffers into `free` for re-use.
@@ -2394,14 +2375,10 @@ mod test {
             assert_eq!(1 + u64::from(blind), stream.status().out_of_window_segments);
         }
 
-        // the SYN of a reconnect counts as a packet of the connection it may
-        // replace, so after it, a hole that an ACK covered is overdue
+        // the SYN of a reconnect ends the connection it replaces, so its
+        // holes become gaps
         {
-            let config = TcpReassemblyConfig {
-                ack_reorder_tolerance: 1,
-                ..Default::default()
-            };
-            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
@@ -2417,10 +2394,11 @@ mod test {
             }
             let mut syn = script.segments[0].clone();
             syn.header.sequence_number = 5000;
-            let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
+            let mut ended = syn.feed(&mut pool, ()).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Reconnect), ended.end());
             assert_eq!(
                 TcpRead::Gap { len: Some(3) },
-                connection.stream_mut(Initiator).read_received()
+                ended.stream_mut(Initiator).read_received()
             );
         }
 
@@ -4446,8 +4424,8 @@ mod test {
         }
 
         // ends putting earlier bytes or a late SYN in front of a mid-stream
-        // pickup: the next bytes are the new start, a late SYN is kept for a
-        // reconnect (C4, C2) and counts nothing
+        // pickup: the next bytes are the new start, a late SYN counts as
+        // out-of-window (C4)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -4467,7 +4445,7 @@ mod test {
                 let (connection, _) = script.feed(&mut pool, 1..2).active.unwrap();
                 let status = connection.stream(Initiator).status();
                 assert_eq!(TcpStreamStart::MidStreamPickup, status.start);
-                assert_eq!(0, status.out_of_window_segments);
+                assert_eq!(1, status.out_of_window_segments);
             }
             let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
             let stream = connection.stream_mut(Initiator);
@@ -5237,8 +5215,7 @@ mod test {
 
         // a keep-alive probe (one byte ending at the seen ACK, without SYN
         // or FIN) doesn't fill an overdue hole, other segments do, and so
-        // does a keep-alive before the hole is overdue (a SYN-ACK with
-        // another ISN changes nothing)
+        // does a keep-alive before the hole is overdue
         for (packets, offset, payload, [syn, fin], expected) in [
             // keep-alive
             (2, 5, &[0][..], [false; 2], &[3..6][..]),
@@ -5248,8 +5225,7 @@ mod test {
             (2, 4, b"ef", [false; 2], &[3..4]),
             // one byte that doesn't end at the seen ACK
             (2, 4, b"e", [false; 2], &[3..4, 5..6]),
-            // SYN-ACK with another ISN, or FIN
-            (2, 5, &[0], [true, false], &[3..6]),
+            // FIN
             (2, 5, &[0], [false, true], &[3..5]),
         ] {
             let config = TcpReassemblyConfig {
@@ -6028,20 +6004,20 @@ mod test {
             }
         }
 
-        // other SYNs of a mid-stream pickup change nothing, not even with
-        // bytes (TCP Fast Open): its own late SYN after the read position
-        // moved or for a pickup that starts at its FIN, SYNs more than k
-        // windows before the first byte, after the first byte or 2^31 away
-        // from the highest offset (can't be mapped) are all kept for a
-        // reconnect (C4, C2) and don't count
-        for (factor, fallback_window, lost, consumed, syn_offset, fin, counted) in [
-            (None, 3, &b""[..], 1, 0, false, 0),
-            (None, 3, b"", 0, 0, true, 0),
-            (Some(2), 2, b"abcde", 0, 0, false, 0),
-            (Some(1), 4, b"abcde", 0, 0, false, 0),
-            (None, 2, b"abcde", 0, 0, false, 0),
-            (None, 3, b"", 0, 2, false, 0),
-            (None, 3, b"", 0, (1 << 31) + 3, false, 0),
+        // other SYNs of a mid-stream pickup change nothing in it, not even
+        // with bytes (TCP Fast Open): its own late SYN after the read
+        // position moved or for a pickup that starts at its FIN counts as
+        // out-of-window (C4), while SYNs more than k windows before the first
+        // byte, after the first byte or 2^31 away from the highest offset
+        // (can't be mapped) have a new ISN and start a reconnect (C2)
+        for (factor, fallback_window, lost, consumed, syn_offset, fin, reconnect) in [
+            (None, 3, &b""[..], 1, 0, false, false),
+            (None, 3, b"", 0, 0, true, false),
+            (Some(2), 2, b"abcde", 0, 0, false, true),
+            (Some(1), 4, b"abcde", 0, 0, false, true),
+            (None, 2, b"abcde", 0, 0, false, true),
+            (None, 3, b"", 0, 2, false, true),
+            (None, 3, b"", 0, (1 << 31) + 3, false, true),
         ] {
             let config = TcpReassemblyConfig {
                 hole_give_up_window_factor: factor,
@@ -6070,12 +6046,21 @@ mod test {
                 stream.read_received();
                 stream.consume(consumed);
             }
-            let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
-            let stream = connection.stream(Initiator);
-            assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
-            assert_eq!(counted, stream.status().out_of_window_segments);
-            assert_eq!(0, stream.status().conflicting_retransmissions);
-            assert_eq!(if fin { 0 } else { 3 }, stream.highest_offset());
+            let processed = syn.feed(&mut pool, ());
+            if reconnect {
+                assert_eq!(
+                    Some(TcpConnectionEnd::Reconnect),
+                    processed.ended.unwrap().end()
+                );
+                assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
+            } else {
+                let (connection, _) = processed.active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+                assert_eq!(1, stream.status().out_of_window_segments);
+                assert_eq!(0, stream.status().conflicting_retransmissions);
+                assert_eq!(if fin { 0 } else { 3 }, stream.highest_offset());
+            }
         }
 
         // the ACK of a late SYN-ACK 2^31 away from the bytes of a mid-stream
@@ -6156,11 +6141,14 @@ mod test {
                     assert_eq!(expected, status.start);
                 }
             }
-            // once the read position moved, the SYN-ACK and the SYN are
-            // kept for a reconnect (C4, C2) and count nothing
+            // once the read position moved, the SYN-ACK counts for the
+            // responder's stream and the SYN for the initiator's (C4)
             let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
             for role in [Initiator, Responder] {
-                assert_eq!(0, connection.stream(role).status().out_of_window_segments);
+                assert_eq!(
+                    u64::from(consumed),
+                    connection.stream(role).status().out_of_window_segments
+                );
             }
         }
 
@@ -6951,24 +6939,6 @@ mod test {
             script.segments.push(syn_ack);
             script.ack(Responder);
             assert_window_end(Default::default(), &script, 2 * (100 << 3));
-        }
-
-        // ... and neither does a SYN with another ISN after the SYN-ACK
-        // started the stream (one far from the stream: the segments of the
-        // stream within an initial window after a kept SYN are kept with it
-        // as a reconnect's, C2)
-        {
-            let config = TcpReassemblyConfig {
-                fallback_window: 50,
-                ..Default::default()
-            };
-            let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.window_scales = [Some(3), Some(3)];
-            script.window_size = 100;
-            script.handshake().ack(Responder);
-            script.segments[0].header.sequence_number += 1 << 20;
-            script.segments.swap(0, 1);
-            assert_window_end(config, &script, 100);
         }
 
         // ... and neither does the SYN after its stream resynced, as it no

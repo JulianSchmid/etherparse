@@ -29,11 +29,12 @@ pub enum TcpConnectionEnd {
 
     /// An endpoint started a new connection on the same key (a reconnect).
     ///
-    /// A SYN with a new ISN only counts once a SYN-ACK of the other endpoint
-    /// confirms it, so a spoofed SYN can't end a connection. The reconnect
-    /// gets a new [`crate::tcp_reassembly::TcpConnectionId`]. A connection
-    /// whose FINs were both ACKed ends as [`TcpConnectionEnd::Finished`]
-    /// instead.
+    /// A SYN or SYN-ACK with a new ISN from an endpoint of the connection
+    /// starts the reconnect right away, in either order of the handshake's
+    /// capture (a retransmission repeats the ISN and starts none). The
+    /// reconnect gets a new [`crate::tcp_reassembly::TcpConnectionId`]. A
+    /// connection whose FINs were both ACKed ends as
+    /// [`TcpConnectionEnd::Finished`] instead.
     Reconnect,
 }
 
