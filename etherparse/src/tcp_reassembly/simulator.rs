@@ -357,12 +357,7 @@ pub(crate) struct Capture {
     /// How many positions each segment of the responder arrives later than
     /// in the world (cycled): a capture merged from two taps. The segments
     /// of one direction keep their order (one tap sees one path; reordering
-    /// within a direction is the reference model's domain), and the SYN-ACK
-    /// of a connection whose SYN is lost keeps its place: a tap's skew lies
-    /// far below a round trip, and the client sends its first bytes a round
-    /// trip after the SYN, so they can't arrive before the SYN-ACK (bytes
-    /// on the tombstone of the connection before would be absorbed as its
-    /// late segments, a known limit of C1).
+    /// within a direction is the reference model's domain).
     pub skew: Vec<usize>,
     /// Whether each segment is captured twice (cycled).
     pub duplicated: Vec<bool>,
@@ -399,17 +394,7 @@ impl Capture {
             if lost(i, segment) && false == other_half_lost {
                 continue;
             }
-            let syn_lost = segment.header.syn
-                && world.iter().enumerate().any(|(j, syn)| {
-                    syn.header.syn
-                        && false == syn.header.ack
-                        && syn.incarnation == segment.incarnation
-                        && lost(j, syn)
-                });
-            let skew = if Responder == segment.sender
-                && false == self.skew.is_empty()
-                && false == syn_lost
-            {
+            let skew = if Responder == segment.sender && false == self.skew.is_empty() {
                 self.skew[i % self.skew.len()]
             } else {
                 0
@@ -531,14 +516,37 @@ fn describe(state: &StreamState) -> String {
     )
 }
 
+/// What a reader got from one stream.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Delivered {
+    /// The bytes, in order.
+    pub bytes: Vec<u8>,
+    /// The gaps: the offset among the bytes they lie at (the number of
+    /// bytes read before them) and their length; adjacent gaps are one.
+    pub gaps: Vec<(usize, u64)>,
+}
+
+impl Delivered {
+    /// Records a gap of `len` bytes after the bytes read so far, joining it
+    /// with a gap that ends there.
+    fn add_gap(&mut self, len: u64) {
+        let at = self.bytes.len();
+        match self.gaps.last_mut() {
+            Some((last_at, last_len)) if *last_at == at => *last_len += len,
+            _ => self.gaps.push((at, len)),
+        }
+    }
+}
+
 /// Everything the pool produced for a capture.
 pub(crate) struct Outcome {
     /// All connections, ended or evicted, by id.
     pub connections: Vec<TcpConnection<u32>>,
-    /// The bytes read from each connection's streams (by id), as an eager
-    /// reader reads them: after every segment, and to the end once the
-    /// connection ended.
-    pub delivered: Vec<[Vec<u8>; 2]>,
+    /// What an eager reader got from each connection's streams (by id):
+    /// the bytes, and the gaps with their lengths where they lie among the
+    /// bytes; read after every segment, and to the end once the connection
+    /// ended.
+    pub delivered: Vec<[Delivered; 2]>,
     pub trace: Trace,
 }
 
@@ -551,17 +559,19 @@ impl Oracle {
     pub fn run(capture: &[TestSegment], config: TcpReassemblyConfig) -> Outcome {
         let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
         let mut connections = Vec::new();
-        let mut delivered: Vec<[Vec<u8>; 2]> = Vec::new();
+        let mut delivered: Vec<[Delivered; 2]> = Vec::new();
         let mut trace = Trace::default();
         // an eager reader: reads after every segment
-        let read = |connection: &mut TcpConnection<u32>, delivered: &mut Vec<[Vec<u8>; 2]>| {
+        let read = |connection: &mut TcpConnection<u32>, delivered: &mut Vec<[Delivered; 2]>| {
             let id = connection.id().0 as usize;
             while delivered.len() <= id {
-                delivered.push([Vec::new(), Vec::new()]);
+                delivered.push([Delivered::default(), Delivered::default()]);
             }
             for role in [Initiator, Responder] {
-                let (bytes, _) = read_to_end(connection.stream_mut(role));
-                delivered[id][role_index(role)].extend(bytes);
+                read_to_end(
+                    connection.stream_mut(role),
+                    &mut delivered[id][role_index(role)],
+                );
             }
         };
         for (i, segment) in capture.iter().enumerate() {
@@ -673,24 +683,26 @@ impl Oracle {
         outcome: &Outcome,
     ) -> Result<(), String> {
         let expected = Expectations::derive(world, capture);
+        let empty = Delivered::default();
         for (index, expected) in expected.connections.iter().enumerate() {
             for role in [Initiator, Responder] {
                 let delivered = outcome
                     .delivered
                     .get(index)
-                    .map_or(&[][..], |streams| &streams[role_index(role)][..]);
-                let wanted: Vec<&Vec<u8>> = expected
+                    .map_or(&empty, |streams| &streams[role_index(role)]);
+                let wanted: Vec<&Delivered> = expected
                     .bytes
                     .iter()
                     .map(|streams| &streams[role_index(role)])
                     .collect();
-                if false == wanted.iter().any(|wanted| delivered == &wanted[..]) {
-                    let shown = |bytes: &[u8]| {
-                        let n = bytes.len().min(60);
+                if false == wanted.iter().any(|wanted| &delivered == wanted) {
+                    let shown = |got: &Delivered| {
+                        let n = got.bytes.len().min(60);
                         format!(
-                            "{} bytes, starting {:?}",
-                            bytes.len(),
-                            String::from_utf8_lossy(&bytes[..n])
+                            "{} bytes, starting {:?}, gaps (after byte, len) {:?}",
+                            got.bytes.len(),
+                            String::from_utf8_lossy(&got.bytes[..n]),
+                            got.gaps
                         )
                     };
                     let wanted: Vec<String> = wanted.iter().map(|w| shown(w)).collect();
@@ -708,26 +720,25 @@ impl Oracle {
     }
 }
 
-/// Reads `stream` to its end, stepping over gaps. Returns the bytes and the
-/// number of gaps.
-fn read_to_end(stream: &mut TcpStream) -> (Vec<u8>, usize) {
-    let mut bytes = Vec::new();
-    let mut gaps = 0;
+/// Reads `stream` as far as it goes, stepping over gaps, and appends what
+/// it got to `delivered`.
+fn read_to_end(stream: &mut TcpStream, delivered: &mut Delivered) {
     for _ in 0..100_000 {
         match stream.read_received() {
             TcpRead::Data(data) => {
                 let len = data.len();
-                bytes.extend_from_slice(data);
+                delivered.bytes.extend_from_slice(data);
                 stream.consume(len);
             }
-            TcpRead::Gap { .. } => {
-                gaps += 1;
+            TcpRead::Gap { len } => {
+                // a gap of unknown length comes from a resync, which the
+                // oracle rejects separately
+                delivered.add_gap(len.unwrap_or(0));
                 stream.consume_gap();
             }
             TcpRead::Pending | TcpRead::End(_) => break,
         }
     }
-    (bytes, gaps)
 }
 
 /// What the pool has to show for one visible real connection.
@@ -738,15 +749,17 @@ struct ExpectedConnection {
     /// `Reconnect` as well if a later connection started before the close
     /// or the reset was captured completely.
     ends: Vec<TcpConnectionEnd>,
-    /// The captured bytes of each stream the pool may deliver, in order:
-    /// the ones that arrived before the connection's end and not before
-    /// the stream's start (its SYN, or its first captured byte if the SYN
-    /// came later or not at all: an eager reader read that byte already, so
-    /// nothing can be put in front of it). If a later connection started
-    /// before the close or the reset was captured completely, the pool may
-    /// have replaced the connection there or let it finish, so the bytes up
-    /// to the replacement are a second possibility.
-    bytes: Vec<[Vec<u8>; 2]>,
+    /// What the pool may deliver for each stream: the captured bytes, in
+    /// order, that arrived before the connection's end and not before the
+    /// stream's start (its SYN, or its first captured byte if the SYN came
+    /// later or not at all: an eager reader read that byte already, so
+    /// nothing can be put in front of it), with a gap wherever bytes are
+    /// missing between them or up to the end the pool knows (the FIN, or
+    /// the furthest byte the other side ACKed). If a later connection
+    /// started before the close or the reset was captured completely, the
+    /// pool may have replaced the connection there or let it finish, so the
+    /// delivery up to the replacement is a second possibility.
+    bytes: Vec<[Delivered; 2]>,
 }
 
 /// What the truth and the capture say the pool has to produce.
@@ -755,15 +768,25 @@ struct Expectations {
     connections: Vec<ExpectedConnection>,
 }
 
+/// What the capture had shown of a connection at some point: the captured
+/// bytes of each stream, the furthest offsets the other side ACKed and the
+/// FINs.
+#[derive(Clone, Debug)]
+struct Snapshot {
+    bytes: [std::collections::BTreeMap<u64, u8>; 2],
+    acked: [u64; 2],
+    fin: [Option<u64>; 2],
+}
+
 /// State of a real connection while walking the capture.
 #[derive(Clone, Debug)]
 struct Walk {
     incarnation: u32,
     visible: bool,
     end: Option<TcpConnectionEnd>,
-    /// Whether a later connection started while this one was open, and the
-    /// captured bytes of each stream up to then.
-    replaced: Option<[std::collections::BTreeMap<u64, u8>; 2]>,
+    /// Whether a later connection started while this one was open, and what
+    /// the capture had shown of this one by then.
+    replaced: Option<Snapshot>,
     fins_seen: [bool; 2],
     fins_acked: [bool; 2],
     /// Offset each stream starts at: 0 if its SYN was captured before its
@@ -771,6 +794,8 @@ struct Walk {
     first_offset: [Option<u64>; 2],
     /// Furthest offset of each stream the other side ACKed so far.
     acked: [u64; 2],
+    /// Offset of each stream's FIN, if captured.
+    fin: [Option<u64>; 2],
     /// Captured data by offset (later copies of a byte don't change it).
     bytes: [std::collections::BTreeMap<u64, u8>; 2],
 }
@@ -790,6 +815,7 @@ impl Expectations {
                 fins_acked: [false; 2],
                 first_offset: [None; 2],
                 acked: [0; 2],
+                fin: [None; 2],
                 bytes: [Default::default(), Default::default()],
             })
             .collect();
@@ -811,7 +837,11 @@ impl Expectations {
             if starts && false == walks[k].visible {
                 for earlier in &mut walks[..k] {
                     if earlier.visible && earlier.end.is_none() && earlier.replaced.is_none() {
-                        earlier.replaced = Some(earlier.bytes.clone());
+                        earlier.replaced = Some(Snapshot {
+                            bytes: earlier.bytes.clone(),
+                            acked: earlier.acked,
+                            fin: earlier.fin,
+                        });
                     }
                 }
                 walks[k].visible = true;
@@ -820,12 +850,20 @@ impl Expectations {
             if false == walk.visible || walk.end.is_some() {
                 continue;
             }
+            // an accepted RST's ACK counts (F4)
+            if let Some(ack) = segment.ack {
+                walk.acked[other] = walk.acked[other].max(ack);
+            }
             if segment.header.rst {
                 walk.end = Some(TcpConnectionEnd::Reset { by: segment.sender });
                 continue;
             }
             if segment.header.syn {
                 walk.first_offset[sender].get_or_insert(0);
+                // the ACK number of a SYN-ACK starts the other stream too (A2)
+                if segment.header.ack {
+                    walk.first_offset[other].get_or_insert(0);
+                }
             }
             // a single byte right before the other side's ACK, arriving at a
             // stream without a start, looks like the filler byte of a
@@ -846,9 +884,7 @@ impl Expectations {
             }
             if segment.header.fin {
                 walk.fins_seen[sender] = true;
-            }
-            if let Some(ack) = segment.ack {
-                walk.acked[other] = walk.acked[other].max(ack);
+                walk.fin[sender] = Some(segment.offset + segment.payload.len() as u64);
             }
             // the FIN of the other side is ACKed once the ACK covers the
             // number after it
@@ -866,21 +902,57 @@ impl Expectations {
             .into_iter()
             .filter(|walk| walk.visible)
             .map(|walk| {
-                let collect = |bytes: [std::collections::BTreeMap<u64, u8>; 2]| {
-                    bytes.map(|bytes| bytes.into_values().collect::<Vec<u8>>())
+                // the delivery: the bytes in order, a gap wherever bytes are
+                // missing between the stream's start and the end the pool
+                // knows (the furthest byte, or what the other side ACKed,
+                // which is no byte beyond a captured FIN)
+                let first_offset = walk.first_offset;
+                let collect = |bytes: [std::collections::BTreeMap<u64, u8>; 2],
+                               acked: [u64; 2],
+                               fin: [Option<u64>; 2]| {
+                    let mut streams = [Delivered::default(), Delivered::default()];
+                    for (i, bytes) in bytes.into_iter().enumerate() {
+                        // a stream without a start and without bytes shows
+                        // nothing, one with a start shows the bytes it knows
+                        // were sent as a gap
+                        let Some(first) = bytes
+                            .first_key_value()
+                            .map(|(&first_byte, _)| {
+                                first_offset[i].unwrap_or(first_byte).min(first_byte)
+                            })
+                            .or(first_offset[i])
+                        else {
+                            continue;
+                        };
+                        let last = bytes.last_key_value().map_or(first, |(k, _)| *k + 1);
+                        let acked = fin[i].map_or(acked[i], |fin| acked[i].min(fin));
+                        let end = last.max(acked).max(fin[i].unwrap_or(0));
+                        let mut expected_offset = first;
+                        for (&offset, &byte) in &bytes {
+                            if offset > expected_offset {
+                                streams[i].add_gap(offset - expected_offset);
+                            }
+                            streams[i].bytes.push(byte);
+                            expected_offset = offset + 1;
+                        }
+                        if end > expected_offset {
+                            streams[i].add_gap(end - expected_offset);
+                        }
+                    }
+                    streams
                 };
                 let mut ends = Vec::new();
                 let mut bytes = Vec::new();
-                if let Some(at_replacement) = walk.replaced {
+                if let Some(then) = walk.replaced {
                     ends.push(TcpConnectionEnd::Reconnect);
-                    bytes.push(collect(at_replacement));
+                    bytes.push(collect(then.bytes, then.acked, then.fin));
                     if let Some(end) = walk.end {
                         ends.push(end);
                     }
                 } else {
                     ends.push(walk.end.unwrap_or(TcpConnectionEnd::Evicted));
                 }
-                bytes.push(collect(walk.bytes));
+                bytes.push(collect(walk.bytes, walk.acked, walk.fin));
                 ExpectedConnection {
                     incarnation: walk.incarnation,
                     ends,
@@ -1020,6 +1092,10 @@ mod test {
     ///   ISN + 1 of the same endpoint, so a late segment of the other side
     ///   that ACKs the old end ACKs the new SYN as well: the numbers can't
     ///   tell the two apart.
+    /// - C1: the capture lost a connection's SYN and shows bytes of it
+    ///   before its SYN-ACK, while the connection before it is visible: the
+    ///   bytes arrive on that connection's tombstone or in that connection,
+    ///   which can't start a new one from them.
     /// - C1: both new ISNs lie within the old spans and a half of the new
     ///   handshake is lost: a segment of the stream that half would have
     ///   started, whose ACK number lies beyond what the other new stream
@@ -1052,6 +1128,18 @@ mod test {
                     .any(|s| s.incarnation as usize == k - 1 && false == s.header.syn)
             });
             if false == previous_visible && previous_late {
+                return true;
+            }
+            let syn_lost = false == of(k, Initiator).any(|s| s.header.syn && false == s.header.ack);
+            let syn_ack_at = captured
+                .iter()
+                .position(|s| s.incarnation as usize == k && s.header.syn && s.header.ack);
+            let bytes_before_syn_ack = captured.iter().enumerate().any(|(i, s)| {
+                s.incarnation as usize == k
+                    && false == s.payload.is_empty()
+                    && syn_ack_at.is_none_or(|at| i < at)
+            });
+            if syn_lost && bytes_before_syn_ack && previous_visible {
                 return true;
             }
             let inside_spans = [Initiator, Responder].iter().all(|role| {
