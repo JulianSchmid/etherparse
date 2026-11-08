@@ -2993,9 +2993,10 @@ mod test {
             );
         }
 
-        // an RST answers a SYN only if it ACKs the SYN itself, like a
-        // SYN-ACK: one that ACKs a byte after it is dropped (a receiver in
-        // SYN-SENT accepts only an RST that ACKs its SYN, F4)
+        // an RST answers a SYN if it ACKs the SYN itself, like a SYN-ACK, or
+        // bytes up to k windows after it, like data, as the capture can have
+        // lost the SYN-ACK of a side that got past SYN-SENT: one that ACKs a
+        // byte further away is dropped (S5)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -3004,7 +3005,7 @@ mod test {
                 s.rst_at(Responder, 0);
             });
             rst.header.sequence_number = 0xdead_beef;
-            rst.header.acknowledgment_number = 1002;
+            rst.header.acknowledgment_number = 1001 + 0x4000_0000;
             script.segments.push(rst);
             script.syn_ack().ack(Initiator).send(Responder, b"response");
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();

@@ -591,8 +591,9 @@ impl TcpStream {
     /// nothing could recover a stream it ended). In SYN-RECEIVED an RST is
     /// checked by its sequence number instead (F4), which the connection
     /// tells apart. With `other_bare`, the other side has neither a start
-    /// nor a kept ACK, so an RST or FIN of it has to ACK the SYN also after
-    /// the wait, as F4 and A4 would take any RST or FIN of such a side.
+    /// nor a kept ACK, so an RST or FIN of it has to ACK the SYN or the
+    /// bytes after it also after the wait, as F4 and A4 would take any RST
+    /// or FIN of such a side.
     pub(crate) fn drops_before_syn_acked(
         &self,
         tcp: &TcpSlice<'_>,
@@ -611,12 +612,14 @@ impl TcpStream {
     }
 
     /// Returns true if the segment `tcp` of the other side ACKs the stream's
-    /// SYN that waits for its ACK (S5): a SYN-ACK or RST ACKs the SYN
-    /// itself, any other segment the SYN or bytes up to k windows after it,
-    /// in case the SYN-ACK or the ACK was not captured, or, unless it is a
-    /// FIN or the candidate carries a FIN (which a blind pair of segments
-    /// could land), the bytes the stream jumped to (its resync candidate,
-    /// R2), where `window` is the receive window of the other side.
+    /// SYN that waits for its ACK (S5): a SYN-ACK ACKs the SYN itself, any
+    /// other segment the SYN or bytes up to k windows after it, in case the
+    /// SYN-ACK or the ACK was not captured (an RST of a side that ACKs bytes
+    /// after the SYN ends a connection that got past it), or, unless it is a
+    /// FIN or an RST or the candidate carries a FIN (which a blind pair of
+    /// segments could land), the bytes the stream jumped to (its resync
+    /// candidate, R2), where `window` is the receive window of the other
+    /// side.
     pub(crate) fn acks_unacked_syn(
         &self,
         tcp: &TcpSlice<'_>,
@@ -627,12 +630,11 @@ impl TcpStream {
             return false;
         };
         let ack = tcp.acknowledgment_number();
-        // a SYN-ACK always ACKs the SYN itself, and an RST that answers a
-        // SYN has to (F4)
-        if tcp.syn() || tcp.rst() {
+        // a SYN-ACK always ACKs the SYN itself
+        if tcp.syn() {
             return syn.is_acked_by(ack);
         }
-        if false == tcp.fin()
+        if false == (tcp.fin() || tcp.rst())
             && self.resync_candidate.is_some_and(|candidate| {
                 false == candidate.fin && candidate.is_within_window(ack, window)
             })

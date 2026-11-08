@@ -593,8 +593,8 @@ impl ModelStream {
 
     /// Returns true if the `segment` of the other side ACKs the stream's SYN
     /// that waits for its ACK: a SYN-ACK the SYN itself (with its bytes),
-    /// another segment the SYN or bytes up to `range` after it, or the
-    /// resync candidate within `window`.
+    /// another segment the SYN or bytes up to `range` after it, or, unless
+    /// it is a FIN or an RST, the resync candidate within `window`.
     fn acks_unacked_syn(
         &self,
         segment: &TestSegment,
@@ -609,11 +609,11 @@ impl ModelStream {
         if false == same_script {
             return false;
         }
-        if segment.header.syn || segment.header.rst {
+        if segment.header.syn {
             return (base..=base + self.syn_len).contains(&ack);
         }
         (base..=base + range).contains(&ack)
-            || (false == segment.header.fin
+            || (false == (segment.header.fin || segment.header.rst)
                 && self.candidates.last().is_some_and(|candidate| {
                     false == candidate.fin && within_window(&candidate.bytes, ack, window)
                 }))

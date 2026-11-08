@@ -2083,6 +2083,31 @@ mod test {
             assert!(sent == got);
         }
 
+        // a capture that lost the SYN-ACK, with the client's tap lagging,
+        // shows the server's RST before the client's ACK and request: the
+        // RST ACKs the request, so the client got past SYN-SENT, and the RST
+        // ends the connection like the bytes the server would have sent
+        // (S5)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, &[b'r'; 947])
+                .rst(Responder);
+            // SYN, RST, ACK, request
+            assert_eq!(None, script.segments[0].feed(&mut pool, 1).ignored);
+            let processed = script.segments[4].feed(&mut pool, 2);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                processed.ended.unwrap().end()
+            );
+            for index in [2, 3] {
+                let processed = script.segments[index].feed(&mut pool, 3);
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+        }
+
         // the tombstone of a reconnect absorbs late duplicates of the replaced
         // connection's handshake as well (C1): one that arrives after the
         // reconnect finished is ignored, while a SYN with a third ISN starts
