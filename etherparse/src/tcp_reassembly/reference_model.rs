@@ -1069,7 +1069,11 @@ impl ModelStream {
             let distance = (u64::from(factor) * window)
                 .min(config.max_stream_buffer as u64 / 2)
                 .max(self.largest_window.unwrap_or(0));
-            let implied_ack = self.highest.saturating_sub(distance);
+            // what the capture showed of the sender, not what ACKs showed
+            let sent = (self.bytes.len() as u64)
+                .max(self.rejected_end)
+                .max(self.fin_offset.unwrap_or(0));
+            let implied_ack = sent.saturating_sub(distance);
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
         let tolerance = u64::from(config.ack_reorder_tolerance);

@@ -83,9 +83,11 @@ pub struct TcpStream {
     seen_ack: u64,
 
     /// Offset up to which the receiver must have ACKed the bytes, as the
-    /// sender sends at most one receive window after the ACK (never moves
-    /// back). It is not cut off at offset 0, so it stays exact if offset 0
-    /// moves (`None` while no packet implied it).
+    /// sender sends at most one receive window after the ACK: some windows
+    /// before the furthest byte or FIN the capture showed of the sender
+    /// (ACKs ahead of them wait for `ack_reorder_tolerance`, K4). It never
+    /// moves back, and it is not cut off at offset 0, so it stays exact if
+    /// offset 0 moves (`None` while no packet implied it).
     implied_ack: Option<i64>,
 
     /// Largest receive window the receiver advertised (`None` while its
@@ -358,9 +360,9 @@ impl TcpStream {
     /// higher ACK, it is the implied ACK: the sender sends at most one
     /// window after the ACK, so the receiver must have ACKed the bytes up
     /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] times its
-    /// largest window before the highest offset (at most half of
-    /// [`TcpReassemblyConfig::max_stream_buffer`], but never less than the
-    /// largest window).
+    /// largest window before the furthest byte or FIN the capture showed of
+    /// the sender (at most half of [`TcpReassemblyConfig::max_stream_buffer`],
+    /// but never less than the largest window).
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
         self.seen_ack
@@ -1441,7 +1443,15 @@ impl TcpStream {
             let distance = window_range(window, config)
                 .min(config.max_stream_buffer as u64 / 2)
                 .max(known);
-            let implied_ack = i64::try_from(self.highest_offset())
+            // what the capture showed of the sender, not the bytes only ACKs
+            // showed: a capture merged from two taps can show the ACKs long
+            // before the bytes, which K4(b) waits for
+            let sent = self
+                .buffer
+                .received_end()
+                .max(self.rejected_end)
+                .max(self.fin_offset.unwrap_or(0));
+            let implied_ack = i64::try_from(sent)
                 .unwrap_or(i64::MAX)
                 .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
             self.implied_ack = self.implied_ack.max(Some(implied_ack));
@@ -2695,8 +2705,8 @@ mod test {
             assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
         }
 
-        // the implied ACK moves with the offsets too, also after a FIN moved
-        // the highest offset back (the implied ACK never moves back)
+        // the implied ACK moves with the offsets too, when bytes are put in
+        // front of a pickup
         {
             let config = TcpReassemblyConfig {
                 fallback_window: 2,
@@ -2707,22 +2717,73 @@ mod test {
             script
                 .handshake()
                 .send(Initiator, b"lostlostxy")
-                .send(Initiator, b"abc");
+                .send(Initiator, b"abc")
+                .send(Initiator, b"de");
             let x = script.injected(|s| {
                 s.send_at(Initiator, 8, b"x");
             });
-            // an ACK two bytes after "abc" (one window), then the FIN after
-            // "abc", which moves the highest offset back
-            script.ack_to(Responder, 15).fin(Initiator);
+            script.fin(Initiator);
             script.segments.push(x);
             script.segments.drain(..4);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Initiator);
-            assert_eq!(Some(5), stream.fin_offset());
+            assert_eq!(Some(7), stream.fin_offset());
             assert_eq!(TcpRead::Data(b"x"), stream.read_received());
             stream.consume(1);
-            // the implied ACK was 2 windows before the ACK, 3 after "x"
+            // the implied ACK was 2 windows before the FIN, 3 after "x"
             assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+        }
+
+        // a capture merged from two taps can show the ACKs long before the
+        // bytes, which then arrive reordered within one window: the ACKs
+        // move the highest offset, but the implied ACK goes by what the
+        // capture showed of the sender, so the holes the reordering opens
+        // stay fillable for `ack_reorder_tolerance` packets (K2, K4), also
+        // with a scaled window and for a reader of the ACKed bytes
+        for (scale, field) in [(None, 3000), (Some(2), 750)] {
+            for acked in [false, true] {
+                let mut pool = TcpReassemblyPool::<(), ()>::default();
+                let mut script = ConnectionScript::with_isns(1000, 2000);
+                script.window_scales = [scale; 2];
+                script.window_size = field;
+                script.handshake();
+                let mut sent = Vec::new();
+                for group in 0..3u8 {
+                    for i in 0..3u8 {
+                        let data = [group * 3 + i; 1000];
+                        sent.extend_from_slice(&data);
+                        script.send(Responder, &data);
+                    }
+                    script.ack(Initiator);
+                }
+                // the ACKs first, then the bytes, the second and third
+                // segment swapped
+                let order = [0, 1, 2, 6, 10, 14, 3, 5, 4, 7, 8, 9, 11, 12, 13];
+                let mut got = Vec::new();
+                for index in order {
+                    let (connection, _) =
+                        script.segments[index].feed(&mut pool, ()).active.unwrap();
+                    let stream = connection.stream_mut(Responder);
+                    loop {
+                        let read = if acked {
+                            stream.read_acked()
+                        } else {
+                            stream.read_received()
+                        };
+                        match read {
+                            TcpRead::Data(data) => {
+                                got.extend_from_slice(data);
+                                let len = data.len();
+                                stream.consume(len);
+                            }
+                            TcpRead::Gap { len } => panic!("gap of {len:?} at {}", got.len()),
+                            _ => break,
+                        }
+                    }
+                }
+                assert_eq!(sent.len(), got.len(), "{scale:?}, {acked}");
+                assert!(sent == got, "{scale:?}, {acked}");
+            }
         }
 
         // a keep-alive doesn't start a stream if it ends at the receiver's
