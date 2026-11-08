@@ -1806,6 +1806,87 @@ mod test {
             );
         }
 
+        // a reuse 1 ms after a close (an ISN clock 15625 ahead) whose SYN-ACK
+        // the capture lost, with the client's tap lagging: the server's
+        // response ACKs the request before the capture shows it, and both its
+        // numbers lie past the old streams' FINs, after which their senders
+        // sent nothing, so it is the reconnect's (C1), not a late old segment
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, b"req")
+                .send(Responder, b"resp")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(1000 + 15_625, 2000 + 15_625);
+            script
+                .handshake()
+                .send(Initiator, b"request")
+                .send(Responder, b"response");
+            // SYN, response, ACK, request (the SYN-ACK lost)
+            for (i, index) in [0, 4, 2, 3].into_iter().enumerate() {
+                let processed = script.segments[index].feed(&mut pool, i as u32);
+                assert_eq!(None, processed.ignored, "segment {index}");
+            }
+            let connection = pool.iter_mut().next().unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"response"),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
+        // a client that aborts after bytes the capture lost reconnects at
+        // once with an ISN within them (after an RST, no TIME-WAIT keeps the
+        // numbers apart): its old stream has no FIN, so its span reaches k
+        // windows past the bytes the capture showed, and the server's segment
+        // still in flight, which ACKs the lost bytes past where the new
+        // client's stream begins, is a late one of the replaced connection
+        // (C1), so the new SYN-ACK starts no further reconnect
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, &[b'o'; 181])
+                .send_uncaptured(Initiator, 181)
+                .rst(Initiator)
+                .send(Responder, b"x");
+            let in_flight = old.segments.pop().unwrap();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(1000 + 182, 900_000);
+            script
+                .handshake()
+                .send(Initiator, b"new-request")
+                .send(Responder, b"new-response");
+            assert_eq!(None, script.segments[0].feed(&mut pool, 7).ignored);
+            assert_eq!(
+                Some(TcpIgnoreReason::AfterEnd),
+                in_flight.feed(&mut pool, 8).ignored
+            );
+            for segment in &script.segments[1..] {
+                let processed = segment.feed(&mut pool, 9);
+                assert_eq!(None, processed.ignored);
+                assert!(processed.ended.is_none());
+            }
+            let connection = pool.iter_mut().next().unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"new-request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"new-response"),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
         // the tombstone of a reconnect absorbs late duplicates of the replaced
         // connection's handshake as well (C1): one that arrives after the
         // reconnect finished is ignored, while a SYN with a third ISN starts

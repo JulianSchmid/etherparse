@@ -704,15 +704,20 @@ impl ModelStream {
     }
 
     /// Returns true if the stream covered the true offset `offset`: from its
-    /// first byte to the offset it reached, plus `ahead` for bytes the
-    /// capture may have missed (see [`ModelStream::first_offset`] and
+    /// first byte to the offset it reached, both widened by `ahead` for
+    /// bytes the capture may have missed, but not before an observed start
+    /// or after a seen FIN (see [`ModelStream::first_offset`] and
     /// [`ModelStream::end_offset`]).
     fn covers(&self, offset: u64, ahead: u64) -> bool {
+        let before = if self.observed { 0 } else { ahead };
+        let after = if self.fin_offset.is_some() { 0 } else { ahead };
         match (self.first_offset(), self.end_offset()) {
-            (Some(first), Some(end)) => (first..=(end + ahead) as i64).contains(&(offset as i64)),
+            (Some(first), Some(end)) => {
+                (first - before as i64..=(end + after) as i64).contains(&(offset as i64))
+            }
             // a stream without a start has no first byte, only the offset
             // its peer's ACKs showed it reached
-            (None, Some(end)) => offset <= end + ahead,
+            (None, Some(end)) => offset <= end + after,
             _ => false,
         }
     }

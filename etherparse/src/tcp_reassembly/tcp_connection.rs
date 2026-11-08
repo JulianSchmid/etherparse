@@ -719,6 +719,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             syns: streams.map(TcpStream::syn),
             first: streams.map(TcpStream::first_seq),
             next: streams.map(TcpStream::next_seq),
+            fin_seen: streams.map(|stream| stream.fin_offset().is_some()),
         }
     }
 
@@ -805,6 +806,9 @@ pub(crate) struct SeqNumbers {
     /// Sequence number each stream's sender sends next, as far as the stream
     /// knew (see [`TcpStream::next_seq`]).
     next: [Option<u32>; 2],
+    /// Whether each stream's FIN was seen: its sender sends nothing after
+    /// it, so `next` is the stream's end.
+    fin_seen: [bool; 2],
 }
 
 impl SeqNumbers {
@@ -827,11 +831,12 @@ impl SeqNumbers {
     /// of the ended connection by its sequence numbers: it lies within the
     /// numbers its sender's stream covered (from its first byte to the
     /// number it reached, plus `ahead` of that stream for bytes the capture
-    /// may have missed), and its ACK number, if it has one, within the
-    /// other stream's the same way, or that stream is unknown. The ACK
-    /// number of an absorbed ACK moves the number the other stream reached
-    /// forward: the capture may have missed that stream's FIN, and the RST
-    /// that answers the ACK lies at the ACK number (RFC 9293 3.10.7.3).
+    /// may have missed, see [`SeqNumbers::covers`]), and its ACK number, if
+    /// it has one, within the other stream's the same way, or that stream
+    /// is unknown. The ACK number of an absorbed ACK moves the number the
+    /// other stream reached forward: the capture may have missed that
+    /// stream's FIN, and the RST that answers the ACK lies at the ACK number
+    /// (RFC 9293 3.10.7.3).
     pub fn absorbs_late(
         &mut self,
         source: SocketAddr,
@@ -857,19 +862,30 @@ impl SeqNumbers {
 
     /// Returns true if the stream with the index `stream` covered the
     /// sequence number `seq`: from its first byte to the number it reached,
-    /// plus `ahead` for bytes the capture may have missed. A stream the
-    /// capture never saw has no first byte, only the number its peer's ACKs
-    /// showed it reached (K1), so it covers everything up to there.
+    /// both widened by `ahead` for bytes the capture may have missed, but
+    /// not before an observed SYN or after a seen FIN, before and after
+    /// which the sender sent nothing (a mid-stream pickup's first byte is
+    /// where the capture started, so the other side's ACKs can lie before
+    /// it). A stream the capture never saw has no first byte, only the
+    /// number its peer's ACKs showed it reached (K1), so it covers
+    /// everything up to there.
     fn covers(&self, stream: usize, seq: u32, ahead: u32) -> bool {
+        let before = if self.syns[stream].is_some() {
+            0
+        } else {
+            ahead
+        };
+        let after = if self.fin_seen[stream] { 0 } else { ahead };
         match (self.first[stream], self.next[stream]) {
             (Some(first), Some(next)) => {
-                // the length is kept wide: a span plus `ahead` can reach a
+                // the length is kept wide: a span plus the slack can reach a
                 // whole cycle of the sequence numbers, which then covers
                 // every number
-                let len = u64::from(next.wrapping_sub(first)) + u64::from(ahead);
-                u64::from(seq.wrapping_sub(first)) <= len
+                let len =
+                    u64::from(next.wrapping_sub(first)) + u64::from(before) + u64::from(after);
+                u64::from(seq.wrapping_sub(first.wrapping_sub(before))) <= len
             }
-            (None, Some(next)) => 0 <= next.wrapping_add(ahead).wrapping_sub(seq) as i32,
+            (None, Some(next)) => 0 <= next.wrapping_add(after).wrapping_sub(seq) as i32,
             _ => false,
         }
     }
@@ -987,15 +1003,17 @@ mod test {
     use std::format;
 
     #[test]
-    fn seq_numbers_cover_a_whole_cycle() {
+    fn seq_numbers_cover() {
         // a span plus the k windows of slack can reach a whole cycle of the
         // sequence numbers, which then covers every number, also right at
         // and past the end (the length is kept wide, not wrapped)
+        let syn = ObservedSyn { isn: 1999, len: 0 };
         let mut seqs = SeqNumbers {
             initiator: addr("10.0.0.1:50000"),
-            syns: [None, None],
+            syns: [None, Some(syn)],
             first: [Some(1000), Some(2000)],
             next: [Some(1000u32.wrapping_add(u32::MAX - 32_767)), Some(2005)],
+            fin_seen: [false; 2],
         };
         let ahead = 8 * 1024 * 1024;
         let end = seqs.next[0].unwrap();
@@ -1006,6 +1024,19 @@ mod test {
         assert!(seqs.covers(1, 2005 + ahead, ahead));
         assert!(false == seqs.covers(1, 1999, ahead));
         assert!(false == seqs.covers(1, 2006 + ahead, ahead));
+        // a stream whose FIN was seen ends there, without slack
+        seqs.fin_seen[1] = true;
+        assert!(seqs.covers(1, 2000, ahead));
+        assert!(seqs.covers(1, 2005, ahead));
+        assert!(false == seqs.covers(1, 2006, ahead));
+        seqs.fin_seen[1] = false;
+        // a mid-stream pickup's first byte is where the capture started, so
+        // the slack reaches before it too
+        seqs.syns[1] = None;
+        assert!(seqs.covers(1, 2000u32.wrapping_sub(ahead), ahead));
+        assert!(false == seqs.covers(1, 1999u32.wrapping_sub(ahead), ahead));
+        assert!(seqs.covers(1, 2005 + ahead, ahead));
+        seqs.syns[1] = Some(syn);
         // an unknown stream covers nothing, a stream without a first byte
         // everything up to the number its peer's ACKs showed plus the slack
         seqs.first[1] = None;
