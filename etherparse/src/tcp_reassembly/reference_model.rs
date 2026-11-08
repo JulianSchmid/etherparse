@@ -1138,7 +1138,7 @@ fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
 /// script: it comes from the same endpoint, without the ACK flag.
 fn retransmits_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
     segment.header.syn
-        && false == segment.header.ack
+        && segment.header.ack == syn.header.ack
         && syn.incarnation == segment.incarnation
         && syn.sender == segment.sender
 }
@@ -1321,28 +1321,24 @@ impl ReferenceModel {
         } else if header.syn && (self.maybe_blind_syn(segment) || false == self.takes_syn(segment))
         {
             // the SYNs of a script all have the same ISN; a retransmission
-            // adds the Fast Open bytes beyond the kept ones, the first win
-            if false == header.ack {
-                match self
-                    .reconnect_syn
-                    .as_mut()
-                    .filter(|syn| retransmits_syn(segment, syn))
-                {
-                    Some(syn) => {
-                        let overlap = syn.payload.len().min(segment.payload.len());
-                        if syn.payload[..overlap] != segment.payload[..overlap] {
-                            self.reconnect_syn_conflicting += 1;
-                        }
-                        if let Some(added) = segment.payload.get(overlap..) {
-                            syn.payload.extend_from_slice(added);
-                        }
-                    }
-                    None => {
-                        self.reconnect_syn_maybe_blind = self.maybe_blind_syn(segment);
-                        self.reconnect_syn = Some(segment.clone());
-                        self.reconnect_syn_conflicting = 0;
-                    }
+            // of the kept SYN or SYN-ACK adds the Fast Open bytes beyond the
+            // kept ones, the first win
+            if let Some(syn) = self
+                .reconnect_syn
+                .as_mut()
+                .filter(|syn| retransmits_syn(segment, syn))
+            {
+                let overlap = syn.payload.len().min(segment.payload.len());
+                if syn.payload[..overlap] != segment.payload[..overlap] {
+                    self.reconnect_syn_conflicting += 1;
                 }
+                if let Some(added) = segment.payload.get(overlap..) {
+                    syn.payload.extend_from_slice(added);
+                }
+            } else if false == header.ack {
+                self.reconnect_syn_maybe_blind = self.maybe_blind_syn(segment);
+                self.reconnect_syn = Some(segment.clone());
+                self.reconnect_syn_conflicting = 0;
             } else if self
                 .reconnect_syn
                 .as_ref()

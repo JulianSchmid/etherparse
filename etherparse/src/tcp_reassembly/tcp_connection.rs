@@ -870,12 +870,13 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
         })
     }
 
-    /// Returns true if the SYN `tcp`, sent by `source`, is a retransmission
-    /// of the kept SYN: it comes from the same endpoint with the same ISN.
+    /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, is a
+    /// retransmission of the kept one: it comes from the same endpoint with
+    /// the same ISN and ACK flag.
     pub fn is_retransmitted_by(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         source == self.source
             && tcp.syn()
-            && false == tcp.ack()
+            && tcp.ack() == self.ack.is_some()
             && tcp.sequence_number() == self.isn
     }
 

@@ -1225,6 +1225,25 @@ mod test {
             assert_eq!(TcpRead::Data(expected), stream.read_received());
         }
 
+        // ... and a retransmission of the kept SYN-ACK keeps the first one's
+        // timestamp, which is the reconnect's `first_seen`
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2000, 6000);
+            script.syn().syn_ack();
+            script.segments[1].feed(&mut pool, 20);
+            script.segments[1].feed(&mut pool, 21);
+            let processed = script.segments[0].feed(&mut pool, 22);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            assert_eq!(&20, processed.active.unwrap().0.first_seen());
+        }
+
         // a SYN-ACK with a new ISN that confirms no reconnect changes
         // nothing: neither its bytes (they would lie at offset 1 of the
         // responder's stream), nor its ACK or window
