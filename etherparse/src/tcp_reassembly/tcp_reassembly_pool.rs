@@ -1374,6 +1374,38 @@ mod test {
             );
         }
 
+        // a reconnect whose SYN-ACK was not captured still delivers both
+        // directions: the responder's bytes ACK the request within k windows
+        // of the SYN, so they answer it (S5) and start the responder's
+        // stream as a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake().send(Initiator, b"old");
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2_000_000_000, 3_000_000_000);
+            script.syn().syn_ack().send(Initiator, &[b'q'; 100]);
+            for _ in 0..200 {
+                script.send(Responder, &[b'r'; 1000]);
+            }
+            script.segments.remove(1);
+            let processed = script.segments[0].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(&[b'q'; 100]),
+                connection.stream_mut(Initiator).read_received()
+            );
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(&[b'r'; 200_000]), stream.read_received());
+        }
+
         // a retransmission of the reconnect's SYN is the reconnect's own and
         // starts no further one, a SYN with another new ISN does
         {
