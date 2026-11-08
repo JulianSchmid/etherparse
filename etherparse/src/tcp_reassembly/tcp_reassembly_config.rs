@@ -126,13 +126,21 @@ pub struct TcpReassemblyConfig {
     /// each counted as for [`TcpReassemblyConfig::max_stream_buffer`]
     /// (default `None`, no limit).
     ///
-    /// Bytes beyond it are rejected, and reading makes room at once.
-    /// Connections handed over as ended don't count, and neither does the
-    /// SYN of a simultaneous open that a connection keeps until a SYN-ACK
-    /// confirms it (at most one per connection). The memory of the streams
-    /// stays within about four times this limit, plus
+    /// Bytes beyond it are rejected, and reading makes room. Connections
+    /// handed over as ended don't count, and neither does the SYN of a
+    /// simultaneous open that a connection keeps until a SYN-ACK confirms it
+    /// (at most one per connection). The memory of the streams stays within
+    /// about four times this limit, plus
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`] per stream, as a
     /// stream gives back the room of consumed bytes (see there).
+    ///
+    /// A stream whose reader waits at a hole holds the bytes after it until
+    /// the hole is given up, up to about
+    /// [`TcpReassemblyConfig::max_stream_buffer`] (see
+    /// [`crate::tcp_reassembly::TcpStream::holes`]), and other streams' bytes
+    /// are rejected meanwhile if that fills the limit. So size it for the
+    /// streams that can wait at holes at the same time, or lower
+    /// `max_stream_buffer`.
     pub max_total_buffered: Option<usize>,
 
     /// Maximum number of unused buffers per kind that the pool keeps for
