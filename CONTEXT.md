@@ -93,7 +93,7 @@ A stream whose FIN was seen and that has no holes before the FIN.
 _Avoid_: closed stream, complete stream
 
 **Finished connection**:
-A connection whose two FINs were both seen and ACKed and whose remaining holes are all overdue; ending it turns those holes into gaps, so both its streams are then finished.
+A connection whose two FINs were both seen and ACKed; ending it turns its remaining holes into gaps, so both its streams are then finished.
 _Avoid_: closed connection, completed connection
 
 **Clean**:
