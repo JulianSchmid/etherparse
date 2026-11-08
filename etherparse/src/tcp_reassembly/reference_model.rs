@@ -1440,20 +1440,6 @@ impl ReferenceModel {
                 self.streams[role_index(receiver)].answer_syn(segment, range, window, same_script);
             }
         }
-        let observed = self.streams.each_ref().map(|stream| stream.observed);
-        // the ACK of a SYN-ACK that the other stream's kept ACK refuses
-        // as its start is not kept either
-        let mut ack_counts = true;
-        if let (true, Some(ack)) = (header.syn, segment.ack) {
-            let range = self.range(sender_role.other());
-            let had_base = self.streams[other].base.is_some();
-            let started = self.streams[other].observe_start(ack, 0, range, &self.config, available);
-            ack_counts = started || had_base;
-        }
-        if let (true, Some(ack)) = (ack_counts, segment.ack) {
-            let window = self.window(sender_role.other());
-            self.streams[other].add_ack(ack, window, self.packets, &self.config);
-        }
         let had_base = self.streams[sender].base.is_some();
         // a SYN kept as possibly blind whose stream starts from these bytes
         // is applied first if they lie within k windows after it (D1)
@@ -1468,6 +1454,20 @@ impl ReferenceModel {
             if let Some(syn) = self.reconnect_syn.take_if(|_| first) {
                 self.apply_kept_syn(syn, available);
             }
+        }
+        let observed = self.streams.each_ref().map(|stream| stream.observed);
+        // the ACK of a SYN-ACK that the other stream's kept ACK refuses
+        // as its start is not kept either
+        let mut ack_counts = true;
+        if let (true, Some(ack)) = (header.syn, segment.ack) {
+            let range = self.range(sender_role.other());
+            let had_base = self.streams[other].base.is_some();
+            let started = self.streams[other].observe_start(ack, 0, range, &self.config, available);
+            ack_counts = started || had_base;
+        }
+        if let (true, Some(ack)) = (ack_counts, segment.ack) {
+            let window = self.window(sender_role.other());
+            self.streams[other].add_ack(ack, window, self.packets, &self.config);
         }
         let window = self.window(sender_role);
         let plausible = self.streams[sender].add_segment(
