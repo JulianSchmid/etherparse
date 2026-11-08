@@ -89,9 +89,9 @@ pub struct TcpReassemblyConfig {
     /// packets are a few milliseconds of one connection at 1 Gbit/s. A hole
     /// from real capture loss stalls a reader for this many packets, but
     /// not past half of [`TcpReassemblyConfig::max_stream_buffer`]: once the
-    /// bytes from it fill that, it is overdue, as waiting longer could
-    /// overflow the buffer. An overdue hole is given up once the read
-    /// position reaches it, and late
+    /// bytes from the hole at the read position fill that, it is overdue,
+    /// as waiting longer could overflow the buffer. An overdue hole is given
+    /// up once the read position reaches it, and late
     /// segments fill it until then. While a stream has holes, or is a
     /// mid-stream pickup that was not read from yet, it keeps the ACKs of
     /// up to this many packets (16 bytes each).

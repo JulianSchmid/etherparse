@@ -1539,12 +1539,12 @@ impl TcpStream {
             // by the ACKs so far (a prepend adds a hole before it)
             self.recent_acks.clear();
         }
-        // the ACK's wait counts packets, not bytes: once the bytes from a
-        // hole the seen ACK covers fill half the stream's buffer, waiting
-        // longer can overflow it (K4(d))
+        // once the bytes from the hole at the read position fill half the
+        // stream's buffer, waiting longer for its bytes can overflow the
+        // buffer and reject bytes the capture showed (K4(d)): the waits of
+        // K2 and K4(b) count windows and packets, not the hole
         if let Some(hole) = self.buffer.hole_at_read_offset() {
-            let half = config.max_stream_buffer as u64 / 2;
-            if hole.end <= self.seen_ack && self.buffer.buffered() as u64 >= half {
+            if self.buffer.buffered() as u64 >= config.max_stream_buffer as u64 / 2 {
                 self.give_up_holes_before(hole.end);
             }
         }
@@ -6906,7 +6906,8 @@ mod test {
         }
 
         // bytes that fill a hole before the furthest stored byte always fit,
-        // while the placeholders of a hole after it count
+        // while the placeholders of a hole after it count (the hole lies
+        // after the read position, so K4(d) doesn't give it up)
         {
             let config = TcpReassemblyConfig {
                 max_stream_buffer: 5,
@@ -6916,8 +6917,9 @@ mod test {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
+                .send_at(Initiator, 0, b"a")
                 .send_at(Initiator, 4, b"e")
-                .send_at(Initiator, 0, b"abcd")
+                .send_at(Initiator, 1, b"bcd")
                 .send_at(Initiator, 6, b"g");
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Initiator);
