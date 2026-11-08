@@ -913,7 +913,7 @@ impl TcpStream {
             // can arrive after the SYN-ACK that started the stream, but not
             // after a resync (A3), even one that kept the mapping
             if self.window_scale.is_none()
-                && Some(seq) == self.start_seq
+                && self.syn.is_some_and(|syn| syn.is_syn(tcp))
                 && 0 == self.status.resyncs
             {
                 self.window_scale = Some(window_scale(tcp));
@@ -6902,6 +6902,38 @@ mod test {
             script.handshake().ack(Responder);
             script.segments.swap(0, 1);
             assert_window_end(Default::default(), &script, 2 * (100 << 3));
+        }
+
+        // ... also one with TCP Fast Open bytes that the SYN-ACK ACKed: the
+        // stream starts after them (A2), so the stream's offsets lag the
+        // script's by their length
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script
+                .syn_with_data(b"GET")
+                .syn_ack()
+                .ack(Initiator)
+                .ack(Responder);
+            script.segments.swap(0, 1);
+            script.feed_all(&mut pool);
+            let end = 2 * (100 << 3);
+            let beyond = script.injected(|s| {
+                s.send_at(Initiator, end + 3 + 1, b"x");
+            });
+            let (connection, _) = beyond.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(0, stream.highest_offset());
+            let within = script.injected(|s| {
+                s.send_at(Initiator, end + 3, b"y");
+            });
+            let (connection, _) = within.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(end + 1, stream.highest_offset());
         }
 
         // only the first SYN with the stream's ISN sets its window scale: a
