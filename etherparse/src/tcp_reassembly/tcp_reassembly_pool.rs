@@ -566,7 +566,7 @@ fn replayed_reconnect_syn<Timestamp>(
         Some(syn)
             if syn.is_acked_by(source, tcp)
                 || syn.is_retransmitted_by(source, tcp)
-                || syn.acks(source, tcp) =>
+                || syn.answers(source, tcp) =>
         {
             Some(syn)
         }
@@ -1003,7 +1003,9 @@ mod test {
             script.handshake().send(Initiator, b"abc");
             let mut syn = script.segments[0].clone();
             syn.header.sequence_number = script.seq(Initiator, 2);
-            syn.payload = b"xyz".to_vec();
+            // (a segment of the stream that started exactly where the kept
+            // SYN's bytes end would be kept with it as a reconnect's, C2)
+            syn.payload = b"xy".to_vec();
             script.segments.push(syn);
             script
                 .send(Initiator, b"def")
@@ -1247,6 +1249,50 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(Some(3_000_000_000), stream.isn());
             assert_eq!(TcpRead::Data(expected), stream.read_received());
+        }
+
+        // ... in the other order, the initiator's ACK and request, captured
+        // between its SYN and the late SYN-ACK, are kept with the SYN and
+        // touch no stream of the old connection, also with ISNs near the old
+        // ones (a quick reuse of the four-tuple, RFC 6528), where the request
+        // would otherwise land in the old stream behind a fake hole
+        for initiator_isn in [70_000, 2_000_000_000] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake().send(Initiator, b"old");
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(initiator_isn, 9000);
+            script
+                .syn()
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"req")
+                .ack(Responder);
+            for index in [0, 2, 3] {
+                let (connection, _) = script.segments[index].feed(&mut pool, 7).active.unwrap();
+                assert_eq!(TcpConnectionId(0), connection.id());
+                let stream = connection.stream(Initiator);
+                assert_eq!(3, stream.highest_offset());
+                assert_eq!(0, stream.holes().count());
+                assert_eq!(0, stream.status().out_of_window_segments);
+                let responder = connection.stream(Responder);
+                assert_eq!(0, responder.acked_offset());
+                assert_eq!(0, responder.status().out_of_window_segments);
+            }
+            let processed = script.segments[1].feed(&mut pool, 8);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&7, connection.first_seen());
+            assert_eq!(
+                TcpRead::Data(b"req"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            let (connection, _) = script.segments[4].feed(&mut pool, 9).active.unwrap();
+            assert_eq!(3, connection.stream(Initiator).acked_offset());
         }
 
         // ... and a retransmission of the kept SYN-ACK keeps the first one's

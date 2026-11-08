@@ -453,9 +453,9 @@ impl TcpStream {
     /// Otherwise it belongs to a reconnect (C2).
     ///
     /// It has to have the ISN of the stream's observed start. Without one,
-    /// it has to lie at or before the stream's first byte, at most as far
-    /// before it as earlier bytes could be put in front of it (the A5
-    /// range, C4), whether the stream can still take it or not (see
+    /// it has to lie at or before the stream's first byte, at most
+    /// as far before it as earlier bytes could be put in front of it (the
+    /// A5 range, C4), whether the stream can still take it or not (see
     /// [`TcpStream::can_take_syn`]). Without a start, the same holds for
     /// the receiver's kept ACK, if there is one.
     pub(crate) fn is_own_syn(

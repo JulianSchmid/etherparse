@@ -58,6 +58,9 @@ pub(crate) struct ReferenceModel {
     /// Whether the kept SYN was kept as a possibly blind one (S5), not as a
     /// reconnect's.
     reconnect_syn_maybe_blind: bool,
+    /// Whether the kept SYN or SYN-ACK lies where its stream's own late one
+    /// could (C4): no segment is kept with it then.
+    reconnect_syn_maybe_own: bool,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -1136,6 +1139,17 @@ fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
 
 /// Returns true if the SYN `segment` retransmits the SYN `syn` of the same
 /// script: it comes from the same endpoint, without the ACK flag.
+/// Returns true if `segment` continues the kept SYN or SYN-ACK `syn` of the
+/// same script right away: it comes from the same endpoint with an ACK and
+/// starts where the kept bytes end (C2).
+fn continues(syn: &TestSegment, segment: &TestSegment) -> bool {
+    segment.header.ack
+        && false == (segment.header.syn || segment.header.rst)
+        && syn.incarnation == segment.incarnation
+        && syn.sender == segment.sender
+        && segment.offset == syn.offset + syn.payload.len() as u64
+}
+
 fn retransmits_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
     segment.header.syn
         && segment.header.ack == syn.header.ack
@@ -1222,19 +1236,6 @@ impl ReferenceModel {
             replaced.end_unless_finished(TcpConnectionEnd::Reconnect);
             return Some(replaced);
         }
-        // the first bytes of a reconnect's responder, captured between its
-        // SYN-ACK and the SYN, are kept with the SYN-ACK
-        if let Some(syn) = self.reconnect_syn.as_mut().filter(|syn| syn.header.ack) {
-            let limit = (self.config.fallback_window as usize).min(self.config.max_stream_buffer);
-            if syn.incarnation == segment.incarnation
-                && syn.sender == segment.sender
-                && false == (header.syn || header.rst || segment.payload.is_empty())
-                && segment.offset == syn.offset + syn.payload.len() as u64
-                && syn.payload.len() + segment.payload.len() <= limit
-            {
-                syn.payload.extend_from_slice(&segment.payload);
-            }
-        }
         if false == self.created {
             if header.rst
                 || (false == header.syn && (segment.payload.is_empty() || false == header.ack))
@@ -1285,7 +1286,14 @@ impl ReferenceModel {
                     bare,
                     same_script,
                 ));
-        if false == dropped {
+        // the first bytes of a reconnect, captured between the halves of its
+        // handshake, continue the kept SYN or SYN-ACK: they are kept with it
+        // and touch no stream (C2)
+        let continuation = self.reconnect_syn.as_ref().is_some_and(|syn| {
+            false == (self.reconnect_syn_maybe_blind || self.reconnect_syn_maybe_own)
+                && continues(syn, segment)
+        });
+        if false == (dropped || continuation) {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
             if (header.syn || header.rst)
@@ -1299,7 +1307,15 @@ impl ReferenceModel {
                 self.streams[other].answer_syn(segment, range, other_window, same_script);
             }
         }
-        if dropped {
+        if continuation {
+            if let Some(syn) = self.reconnect_syn.as_mut() {
+                let limit =
+                    (self.config.fallback_window as usize).min(self.config.max_stream_buffer);
+                if syn.payload.len() + segment.payload.len() <= limit {
+                    syn.payload.extend_from_slice(&segment.payload);
+                }
+            }
+        } else if dropped {
             self.streams[sender].out_of_window_segments += 1;
             // the dropped segments agree within the window of their own
             // stream (R3); a segment without ACK changes nothing else (S6)
@@ -1337,6 +1353,7 @@ impl ReferenceModel {
                 }
             } else if false == header.ack {
                 self.reconnect_syn_maybe_blind = self.maybe_blind_syn(segment);
+                self.reconnect_syn_maybe_own = self.is_own_syn(segment);
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
             } else if self
@@ -1347,6 +1364,7 @@ impl ReferenceModel {
                 // a SYN-ACK captured before its SYN is kept for that SYN,
                 // unless a SYN is kept
                 self.reconnect_syn_maybe_blind = false;
+                self.reconnect_syn_maybe_own = self.is_own_syn(segment);
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
             }
@@ -1682,9 +1700,14 @@ impl ReferenceModel {
             .reconnect_syn
             .as_ref()
             .is_some_and(|syn| acks_syn(segment, syn));
+        let continues_kept = self.reconnect_syn.as_ref().is_some_and(|syn| {
+            false == (self.reconnect_syn_maybe_blind || self.reconnect_syn_maybe_own)
+                && continues(syn, segment)
+        });
         false == self.created
             || self.end.is_some()
             || Some(segment.incarnation) == self.incarnation
+            || continues_kept
             || (header.syn
                 && false == header.rst
                 && (acks_kept_syn
@@ -3186,7 +3209,8 @@ mod test {
             lost in vec(any::<Index>(), 0..4),
             swapped in any::<bool>(),
             syn_position in any::<Index>(),
-            syn_ack_delay in 0usize..8,
+            syn_ack_delay in -4isize..8,
+            between in 0usize..4,
             interleaving in vec(any::<bool>(), 1..64),
             retransmitted_syns in vec((any::<bool>(), any::<Index>()), 0..3),
             spoofed_syns in vec((tcp_role_any(), any::<Index>(), 0u32..(1 << 20)), 0..3),
@@ -3241,18 +3265,32 @@ mod test {
             new.fin(Initiator).fin(Responder).ack(Initiator);
 
             // the new SYN comes after the old handshake (or the first segment
-            // of a pickup), its SYN-ACK a few old segments later, and then
-            // the rest of both connections interleaved (old segments after
-            // the reconnect are left out, see `ReferenceModel::predicts`)
-            let first = (if pickup { 1 } else { 2 }).min(old.segments.len());
+            // of a pickup), its SYN-ACK a few old segments later (or before
+            // the SYN, with a negative delay, as in a capture merged from two
+            // taps), a few segments of the reconnect between the two, and
+            // then the rest of both connections interleaved (old segments
+            // after the reconnect are left out, see `ReferenceModel::predicts`)
+            // (a SYN-ACK before the ACK of the old handshake would be dropped
+            // while the old responder's SYN is unanswered, S5)
+            let first = if pickup {
+                1
+            } else if syn_ack_delay < 0 {
+                3
+            } else {
+                2
+            };
+            let first = first.min(old.segments.len());
             let syn_at = first + syn_position.index(old.segments.len() - first + 1);
-            let syn_ack_at = (syn_at + syn_ack_delay).min(old.segments.len());
+            let syn_ack_at = (syn_at + syn_ack_delay.unsigned_abs()).min(old.segments.len());
+            let between = between.min(new.segments.len() - 2);
+            let [first_half, second_half] = if syn_ack_delay < 0 { [1, 0] } else { [0, 1] };
             let mut segments = old.segments[..syn_at].to_vec();
-            segments.push(new.segments[0].clone());
+            segments.push(new.segments[first_half].clone());
             segments.extend_from_slice(&old.segments[syn_at..syn_ack_at]);
-            segments.push(new.segments[1].clone());
+            segments.extend_from_slice(&new.segments[2..2 + between]);
+            segments.push(new.segments[second_half].clone());
             let mut old_rest = old.segments[syn_ack_at..].iter();
-            let mut new_rest = new.segments[2..].iter();
+            let mut new_rest = new.segments[2 + between..].iter();
             for take_old in interleaving.iter().cycle() {
                 let next = if *take_old {
                     old_rest.next().or_else(|| new_rest.next())
