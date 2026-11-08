@@ -169,8 +169,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             Verdict::KeepSyn { maybe_blind } => {
                 self.keep_reconnect_syn(source, tcp, maybe_blind, free);
             }
+            Verdict::ForeignSynAck => {
+                // the SYN it answers may follow in a capture merged from two
+                // taps: it is kept for that SYN (C2), unless a SYN is kept
+                if self
+                    .reconnect_syn
+                    .as_ref()
+                    .is_none_or(|kept| kept.ack.is_some())
+                {
+                    self.keep_reconnect_syn(source, tcp, false, free);
+                }
+                self.stream_mut(sender.other())
+                    .answer_syn(tcp, window, config);
+            }
             // the pool replaced the connection on `ConfirmsReconnect` before
-            Verdict::ForeignSynAck | Verdict::ConfirmsReconnect => {
+            Verdict::ConfirmsReconnect => {
                 self.stream_mut(sender.other())
                     .answer_syn(tcp, window, config);
             }
@@ -283,7 +296,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let own = stream.is_own_syn(tcp, self.window(sender, config), config)
             || self.answers_observed_syn(sender, tcp);
         if false == tcp.ack() {
-            return if maybe_blind || false == own {
+            // a SYN-ACK of the other endpoint captured before the SYN it
+            // ACKs was kept for it: the SYN confirms the reconnect (C2)
+            let answered = self
+                .reconnect_syn
+                .as_ref()
+                .is_some_and(|kept| kept.acks(self.endpoint(sender), tcp));
+            return if answered && false == (own || tcp.fin()) {
+                Verdict::ConfirmsReconnect
+            } else if maybe_blind || false == own {
                 Verdict::KeepSyn { maybe_blind }
             } else {
                 Verdict::Applied
@@ -293,7 +314,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // kept and it ACKs that SYN without having the ISN of its sender's
         // stream, or has a new ISN itself while its sender's SYN is answered
         // (a side whose own SYN is unanswered confirms one only by ACKing
-        // the kept SYN, S5)
+        // the kept SYN, S5); a kept SYN-ACK of the other endpoint confirms
+        // one only by being ACKed, like a kept SYN
         let kept = self
             .reconnect_syn
             .as_ref()
@@ -564,6 +586,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             source,
             timestamp: self.last_seen.clone(),
             isn: tcp.sequence_number(),
+            ack: tcp.ack().then(|| tcp.acknowledgment_number()),
             payload_len: tcp.payload().len(),
             conflicting: 0,
             maybe_blind,
@@ -571,19 +594,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         });
     }
 
-    /// Returns true if `tcp`, sent by `source`, is a SYN-ACK that confirms
-    /// a reconnect (see [`Verdict::ConfirmsReconnect`]): the pool replaces
-    /// the connection then.
+    /// Returns true if `tcp`, sent by `source`, is a SYN-ACK or SYN that
+    /// confirms a reconnect (see [`Verdict::ConfirmsReconnect`]): the pool
+    /// replaces the connection then.
     pub(crate) fn confirms_reconnect(
         &self,
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        // only a SYN-ACK can, so the verdict is left to `add_segment` for
-        // every other segment
-        (tcp.syn() && tcp.ack())
-            && Verdict::ConfirmsReconnect == self.verdict(self.role(source), tcp, config)
+        // only a SYN or SYN-ACK can, so the verdict is left to `add_segment`
+        // for every other segment
+        tcp.syn() && Verdict::ConfirmsReconnect == self.verdict(self.role(source), tcp, config)
     }
 
     /// Takes the kept SYN of a reconnect, if there is one.
@@ -591,8 +613,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.reconnect_syn.take()
     }
 
-    /// Applies the kept SYN `syn` of a reconnect as the connection's first
-    /// packet, storing at most `available` more bytes.
+    /// Applies the kept SYN or SYN-ACK `syn` of a reconnect as the
+    /// connection's first packet, storing at most `available` more bytes.
     pub(crate) fn add_reconnect_syn(
         &mut self,
         syn: &ReconnectSyn<Timestamp>,
@@ -708,7 +730,7 @@ pub(crate) struct Tombstone<Timestamp> {
     syns: [Option<ObservedSyn>; 2],
     /// Timestamp of the connection's last packet, also a late one.
     pub last_seen: Timestamp,
-    /// SYN that the connection kept (see
+    /// SYN or SYN-ACK that the connection kept (see
     /// [`TcpConnection::confirms_reconnect`]).
     pub reconnect_syn: Option<ReconnectSyn<Timestamp>>,
 }
@@ -756,10 +778,12 @@ enum Verdict {
     /// starts or the simultaneous open it is part of (C2).
     KeepSyn { maybe_blind: bool },
     /// A SYN-ACK with a new ISN that confirms no reconnect: it changes
-    /// nothing but what its ACK answers (C3).
+    /// nothing but what its ACK answers (C3), and is kept for the SYN it
+    /// answers if no SYN is kept (C2).
     ForeignSynAck,
-    /// A SYN-ACK that confirms a reconnect (C2): the pool replaces the
-    /// connection with one that starts at the kept SYN.
+    /// A SYN-ACK that confirms a reconnect, or a SYN that a kept SYN-ACK
+    /// answers (C2): the pool replaces the connection with one that starts
+    /// at the kept SYN or SYN-ACK.
     ConfirmsReconnect,
     /// A segment of the sender's stream, the stream's own SYN or SYN-ACK
     /// included: applied, after the kept SYN of a simultaneous open that
@@ -769,7 +793,8 @@ enum Verdict {
 
 /// SYN that is not its stream's own, kept until a SYN-ACK of the other
 /// endpoint confirms the reconnect it starts or the simultaneous open it is
-/// part of.
+/// part of; or such a SYN-ACK captured before its SYN, kept until that SYN
+/// arrives (C2).
 #[derive(Clone, Debug)]
 pub(crate) struct ReconnectSyn<Timestamp> {
     /// Endpoint that sent the SYN.
@@ -778,6 +803,8 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     timestamp: Timestamp,
     /// ISN of the SYN.
     isn: u32,
+    /// ACK number, if the kept segment is a SYN-ACK.
+    ack: Option<u32>,
     /// Number of bytes the SYN carries (TCP Fast Open), with the ones its
     /// retransmissions added.
     payload_len: usize,
@@ -806,6 +833,20 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
             .acknowledgment_number()
             .wrapping_sub(self.isn.wrapping_add(1));
         source != self.source && tcp.ack() && (acked as usize) <= self.payload_len
+    }
+
+    /// Returns true if the kept segment is a SYN-ACK of another endpoint
+    /// that ACKs the SYN `tcp` sent by `source`: it ACKs from the ISN of the
+    /// SYN plus one up to the end of its bytes (a server ACKs TCP Fast Open
+    /// bytes it accepts).
+    pub fn acks(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        self.ack.is_some_and(|ack| {
+            let acked = ack.wrapping_sub(tcp.sequence_number().wrapping_add(1));
+            source != self.source
+                && tcp.syn()
+                && false == tcp.ack()
+                && (acked as usize) <= tcp.payload().len()
+        })
     }
 
     /// Returns true if the SYN `tcp`, sent by `source`, is a retransmission

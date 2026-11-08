@@ -148,7 +148,10 @@ where
     /// [`TcpProcessed::ended`] (see [`TcpConnectionEnd::Reconnect`]), and
     /// the reconnect, which starts with the SYN if the SYN-ACK ACKs it, is
     /// [`TcpProcessed::active`]. Without such a SYN-ACK, the SYN changes
-    /// nothing, so a spoofed SYN can't end a connection.
+    /// nothing, so a spoofed SYN can't end a connection. A SYN-ACK with a
+    /// new ISN captured before its SYN (e.g. in a capture merged from two
+    /// taps) is kept the same way, and the SYN it ACKs confirms the
+    /// reconnect, which then starts with the SYN-ACK.
     pub fn process_segment(
         &mut self,
         segment: TcpSegment<'_, CustomChannelId>,
@@ -560,7 +563,11 @@ fn replayed_reconnect_syn<Timestamp>(
     free: &mut FreeBuffers,
 ) -> Option<ReconnectSyn<Timestamp>> {
     match kept {
-        Some(syn) if syn.is_acked_by(source, tcp) || syn.is_retransmitted_by(source, tcp) => {
+        Some(syn)
+            if syn.is_acked_by(source, tcp)
+                || syn.is_retransmitted_by(source, tcp)
+                || syn.acks(source, tcp) =>
+        {
             Some(syn)
         }
         Some(syn) => {
@@ -1100,6 +1107,78 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpStreamStart::Observed, stream.status().start);
             assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
+        // a reconnect whose SYN-ACK is captured before its SYN (two taps
+        // merged, the old connection's close not captured) is confirmed by
+        // the SYN that the kept SYN-ACK ACKs: the old connection is handed
+        // over at the SYN, the reconnect starts with the SYN-ACK (its
+        // timestamp) and then the SYN, and the bytes after the handshake land
+        // in the reconnect without a hole; the SYN's TCP Fast Open bytes lie
+        // before the start that the SYN-ACK's ACK number gave (A2), as in
+        // any capture that shows the SYN-ACK first
+        for (syn_data, isn) in [(&b""[..], 2000), (b"GET", 2003)] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake().send(Initiator, b"old");
+            let (connection, _) = old.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"old"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            let mut script = ConnectionScript::with_isns(2000, 6000);
+            script
+                .syn_with_data(syn_data)
+                .syn_ack()
+                .send(Initiator, b"new");
+            let processed = script.segments[1].feed(&mut pool, 7);
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(0), processed.active.unwrap().0.id());
+            let processed = script.segments[0].feed(&mut pool, 8);
+            let ended = processed.ended.unwrap();
+            assert_eq!(TcpConnectionId(0), ended.id());
+            assert_eq!(Some(TcpConnectionEnd::Reconnect), ended.end());
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Initiator, sender);
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&7, connection.first_seen());
+            let processed = script.segments[2].feed(&mut pool, 9);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            for (role, isn) in [(Initiator, isn), (Responder, 6000)] {
+                let stream = connection.stream(role);
+                assert_eq!(Some(isn), stream.isn());
+                assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            }
+            assert_eq!(
+                TcpRead::Data(b"new"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // ... but a SYN that the kept SYN-ACK doesn't ACK confirms nothing
+        // and replaces it (C2), and the old connection goes on
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2000, 6000);
+            script.syn().syn_ack();
+            script.segments[1].feed(&mut pool, 7);
+            script.segments[0].header.sequence_number = 3000;
+            let processed = script.segments[0].feed(&mut pool, 8);
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(0), processed.active.unwrap().0.id());
+            old.send(Initiator, b"old");
+            let processed = old.segments.last().unwrap().feed(&mut pool, 9);
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"old"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // a SYN-ACK with a new ISN that confirms no reconnect changes

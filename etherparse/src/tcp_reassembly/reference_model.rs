@@ -1205,10 +1205,9 @@ impl ReferenceModel {
         if reconnect {
             // the reconnect starts with the kept SYN if the segment ACKs it
             // or retransmits it
-            let syn = self
-                .reconnect_syn
-                .take()
-                .filter(|syn| acks_syn(segment, syn) || retransmits_syn(segment, syn));
+            let syn = self.reconnect_syn.take().filter(|syn| {
+                acks_syn(segment, syn) || retransmits_syn(segment, syn) || acks_syn(syn, segment)
+            });
             let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
             let next = self.next_connection();
             let mut replaced = core::mem::replace(self, next);
@@ -1331,6 +1330,16 @@ impl ReferenceModel {
                         self.reconnect_syn_conflicting = 0;
                     }
                 }
+            } else if self
+                .reconnect_syn
+                .as_ref()
+                .is_none_or(|kept| kept.header.ack)
+            {
+                // a SYN-ACK captured before its SYN is kept for that SYN,
+                // unless a SYN is kept
+                self.reconnect_syn_maybe_blind = false;
+                self.reconnect_syn = Some(segment.clone());
+                self.reconnect_syn_conflicting = 0;
             }
         } else {
             self.apply_own_segment(segment, &mut available);
@@ -1537,8 +1546,15 @@ impl ReferenceModel {
         else {
             return false;
         };
-        if false == (header.syn && header.ack) || header.rst || header.fin {
+        if false == header.syn || header.rst || header.fin {
             return false;
+        }
+        if false == header.ack {
+            // a kept SYN-ACK of the other endpoint confirms the reconnect of
+            // the SYN it ACKs, captured after it
+            return syn.header.ack
+                && acks_syn(syn, segment)
+                && false == (self.dropped_before_syn_acked(segment) || self.is_own_syn(segment));
         }
         if acks_syn(segment, syn) {
             return false == self.has_isn_of_sender(segment);
@@ -1549,13 +1565,7 @@ impl ReferenceModel {
             return false;
         }
         // a SYN-ACK the receiver drops confirms nothing (S5)
-        let other_role = self.sender_role(segment).other();
-        let other = role_index(other_role);
-        let (range, window) = (self.range(other_role), self.window(other_role));
-        let sender = role_index(self.sender_role(segment));
-        let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
-        let same_script = Some(segment.incarnation) == self.incarnation;
-        if self.streams[other].drops_before_syn_acked(segment, range, window, bare, same_script) {
+        if self.dropped_before_syn_acked(segment) {
             return false;
         }
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
@@ -1567,6 +1577,18 @@ impl ReferenceModel {
             == (self.streams[sender].syn_unacked
                 || self.is_own_syn(segment)
                 || self.answers_observed_syn(segment))
+    }
+
+    /// Returns true if the receiver drops `segment` while its SYN is
+    /// unanswered (S5).
+    fn dropped_before_syn_acked(&self, segment: &TestSegment) -> bool {
+        let other_role = self.sender_role(segment).other();
+        let other = role_index(other_role);
+        let (range, window) = (self.range(other_role), self.window(other_role));
+        let sender = role_index(self.sender_role(segment));
+        let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
+        let same_script = Some(segment.incarnation) == self.incarnation;
+        self.streams[other].drops_before_syn_acked(segment, range, window, bare, same_script)
     }
 
     /// Returns true if `segment`, whose sender's stream has no start, ACKs
