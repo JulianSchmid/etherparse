@@ -24,11 +24,15 @@ pub struct TcpReassemblyConfig {
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`]).
     ///
     /// Size it above the bytes a connection can have in flight (bandwidth
-    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB) plus 64 KiB,
-    /// and above twice those bytes for captures without the receiver's
-    /// packets. Otherwise a lost segment whose retransmission arrives after
-    /// a full window of bytes becomes a gap although the retransmission was
-    /// captured (see [`crate::tcp_reassembly::TcpStream::holes`]).
+    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB) plus a burst
+    /// of loss (a run of lost segments and the one after it, 64 KiB at
+    /// least), and above twice those bytes for captures without the
+    /// receiver's packets. Otherwise a lost segment whose retransmission
+    /// arrives after a full window of bytes becomes a gap although the
+    /// retransmission was captured, or the bytes after a burst of loss are
+    /// rejected (see [`crate::tcp_reassembly::TcpStream::holes`]). For
+    /// captures that start mid-stream, size
+    /// [`TcpReassemblyConfig::fallback_window`] too.
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes before the furthest stored byte of a stream
