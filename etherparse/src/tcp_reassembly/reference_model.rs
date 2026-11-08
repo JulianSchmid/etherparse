@@ -1,7 +1,7 @@
 use crate::tcp_reassembly::*;
 use core::net::SocketAddr;
 use core::ops::Range;
-use std::vec::Vec;
+use std::{boxed::Box, vec::Vec};
 
 /// Simple model of the bytes a [`TcpReassemblyPool`] delivers.
 ///
@@ -28,6 +28,9 @@ pub(crate) struct ReferenceModel {
     id: u64,
     /// Whether a segment started the connection.
     created: bool,
+    /// The connection this one replaced (C2), whose late handshake
+    /// duplicates it absorbs (C1).
+    replaced: Option<Box<ReferenceModel>>,
     /// Endpoint of the initiator, once the connection was created (the
     /// roles of a segment follow its endpoints, as in the pool, not the
     /// roles of its script).
@@ -1201,9 +1204,11 @@ impl ReferenceModel {
             let mut replaced = core::mem::replace(self, next);
             self.apply(segment);
             if replaced.end.is_some() {
+                self.replaced = Some(Box::new(replaced));
                 return None;
             }
             replaced.end_unless_finished(TcpConnectionEnd::Reconnect);
+            self.replaced = Some(Box::new(replaced.clone()));
             return Some(replaced);
         }
         if false == self.created {
@@ -1540,6 +1545,18 @@ impl ReferenceModel {
         false == segment.header.ack
             && self.streams[role_index(sender)].base.is_none()
             && self.streams[role_index(sender.other())].syn_unacked
+    }
+
+    /// Returns true if the SYN or SYN-ACK `segment` is a late duplicate of
+    /// the handshake of the connection this one replaced (C1): the pool
+    /// ignores it.
+    pub fn absorbs_late_handshake(&self, segment: &TestSegment) -> bool {
+        segment.header.syn
+            && false == segment.header.rst
+            && self
+                .replaced
+                .as_ref()
+                .is_some_and(|replaced| replaced.is_own_handshake(segment))
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` is the own one of its
@@ -1945,6 +1962,13 @@ mod test {
                 evict_and_check(pool, &mut model)?;
             }
             if false == model.predicts(segment) {
+                continue;
+            }
+            // a late duplicate of the replaced connection's handshake is
+            // ignored
+            if model.absorbs_late_handshake(segment) {
+                let processed = segment.feed(pool, ());
+                prop_assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
                 continue;
             }
             // segments on the tombstone are ignored, unless they start a new

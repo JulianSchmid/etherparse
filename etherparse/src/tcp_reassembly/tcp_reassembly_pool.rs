@@ -169,6 +169,11 @@ where
         let mut entry = match self.connections.entry(key) {
             Entry::Occupied(mut entry) => {
                 let connection = entry.get_mut();
+                // a late duplicate of the handshake of the connection this
+                // one replaced is absorbed like on a tombstone (C1)
+                if connection.absorbs_late_handshake(source, &tcp) {
+                    return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
+                }
                 if connection.starts_reconnect(source, &tcp, &self.config) {
                     let reconnect = new_connection(
                         &mut self.next_id,
@@ -181,6 +186,7 @@ where
                     let mut ended = core::mem::replace(entry.get_mut(), reconnect);
                     ended.release_buffered(&mut self.buffered);
                     ended.end_unless_finished(TcpConnectionEnd::Reconnect);
+                    entry.get_mut().remember_replaced(ended.tombstone());
                     replaced = Some(ended);
                 }
                 entry
@@ -194,15 +200,18 @@ where
                         tombstone.last_seen = timestamp;
                         return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
                     }
-                    self.tombstones.remove(entry.key());
-                    new_connection(
+                    let mut connection = new_connection(
                         &mut self.next_id,
                         &mut self.free,
                         entry.key().clone(),
                         handshake_initiator(&tcp, source, destination),
                         false,
                         timestamp.clone(),
-                    )
+                    );
+                    if let Some(tombstone) = self.tombstones.remove(entry.key()) {
+                        connection.remember_replaced(tombstone);
+                    }
+                    connection
                 } else {
                     let Some((initiator, roles_guessed)) =
                         new_connection_initiator(&tcp, source, destination)
@@ -1304,6 +1313,37 @@ mod test {
             } else {
                 assert!(matches!(read, TcpRead::Gap { .. }), "{read:?}");
             }
+        }
+
+        // a late duplicate of the replaced connection's handshake, captured
+        // after the reconnect started, is absorbed like on a tombstone (C1)
+        // and starts no further reconnect; the reconnect goes on
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(1_000_000_000, 2_000_000_000);
+            script.syn().syn_ack().send(Initiator, b"req");
+            let processed = script.segments[0].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            for index in [0, 1] {
+                let processed = old.segments[index].feed(&mut pool, 8);
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"req"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                0,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
         }
 
         // a SYN-ACK that answers another SYN than the unanswered one of the

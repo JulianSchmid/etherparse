@@ -21,6 +21,10 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// side's SYN is unanswered until a SYN-ACK confirms it as the SYN of a
     /// simultaneous open (S5); `None` without one.
     kept_syn: Option<KeptSyn>,
+    /// Handshake of the connection this one replaced (C2), whose late
+    /// duplicates it absorbs like a tombstone would (C1); `None` if it
+    /// replaced none.
+    replaced: Option<Tombstone<Timestamp>>,
     /// Bytes the streams buffered when the pool last accounted for them.
     accounted: usize,
 }
@@ -52,6 +56,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             end: None,
             packets: 0,
             kept_syn: None,
+            replaced: None,
             accounted: 0,
         }
     }
@@ -591,6 +596,28 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.stream(role.other())
             .advertised_window(self.stream(role))
             .unwrap_or(u64::from(config.fallback_window))
+    }
+
+    /// Remembers the handshake of the connection `replaced` that this one
+    /// replaced (C2), to absorb its late duplicates (C1).
+    pub(crate) fn remember_replaced(&mut self, replaced: Tombstone<Timestamp>) {
+        self.replaced = Some(replaced);
+    }
+
+    /// Returns true if `tcp`, sent by `source`, is a late duplicate of the
+    /// handshake of the connection this one replaced (C1): the pool ignores
+    /// it like a segment on a tombstone.
+    pub(crate) fn absorbs_late_handshake(
+        &mut self,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+    ) -> bool {
+        tcp.syn()
+            && false == tcp.rst()
+            && self
+                .replaced
+                .as_mut()
+                .is_some_and(|replaced| replaced.is_own_handshake(source, tcp))
     }
 
     /// What the pool keeps of the connection once it ended.
