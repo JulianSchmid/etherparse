@@ -302,31 +302,28 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if false == (tcp.ack() || stream.has_start()) && other.awaits_syn_ack() {
             return Verdict::KeepSyn;
         }
-        // a SYN-ACK that ACKs the other stream's SYN is the own one too,
-        // whatever ACK a blind segment left kept for its stream (S5), while a
-        // SYN-ACK into a stream without an observed SYN that doesn't ACK the
-        // other stream's observed SYN answers another SYN (C2)
-        let answers_other_syn = tcp.ack()
-            && stream.isn().is_none()
-            && other
-                .syn()
-                .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
-        // a pickup's own late SYN arrives among its stream's first segments:
-        // once the stream started from its sender's bytes or FIN and a FIN of
-        // the connection was seen, a SYN in its A5 range is a reconnect's
-        // (C4), unless it lies right at the stream's first byte (a stream
-        // without a start has no A5 range, and a merged capture can show its
-        // own late SYN after the other side's FIN)
-        let closing = self.initiator_stream.fin_offset().is_some()
-            || self.responder_stream.fin_offset().is_some();
-        let after_close = stream.isn().is_none()
-            && stream.has_start()
-            && closing
-            && false == stream.syn_at_first_byte(tcp);
+        // whose the SYN or SYN-ACK is, the exact evidence first (C4): the
+        // stream's observed ISN, which a retransmission repeats (C3); else,
+        // for a SYN-ACK, whether it ACKs the other stream's observed SYN or
+        // answers another SYN (C2), whatever ACK a blind segment left kept
+        // for its stream (S5); only where neither speaks the heuristics: a
+        // pickup's own late SYN lies right at its first byte, or within its
+        // A5 range before a FIN of the connection (a reconnect's SYN comes
+        // after the old connection began to close), and the SYN of a stream
+        // without a start near the other side's kept ACK (K1)
         let window = self.window(sender, config);
-        if false == self.answers_observed_syn(sender, tcp)
-            && (answers_other_syn || after_close || false == stream.is_own_syn(tcp, window, config))
-        {
+        let own = if stream.isn().is_some() {
+            stream.is_own_syn(tcp, window, config)
+        } else if let Some(syn) = other.syn().filter(|_| tcp.ack()) {
+            syn.is_acked_by(tcp.acknowledgment_number())
+        } else {
+            let closing = self.initiator_stream.fin_offset().is_some()
+                || self.responder_stream.fin_offset().is_some();
+            stream.syn_at_first_byte(tcp)
+                || (false == (stream.has_start() && closing)
+                    && stream.is_own_syn(tcp, window, config))
+        };
+        if false == own {
             // a SYN or SYN-ACK with a new ISN starts a reconnect (C2)
             Verdict::StartsReconnect
         } else if stream.takes_syn(tcp, window, config, available) {
@@ -817,26 +814,28 @@ pub(crate) struct SeqNumbers {
 
 impl SeqNumbers {
     /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
-    /// to the handshake: it has the ISN of its sender's stream, or it is a
-    /// SYN-ACK that ACKs the SYN of the other stream (up to the end of the
-    /// SYN's TCP Fast Open bytes). A retransmitted SYN can carry more TCP
-    /// Fast Open bytes, which a late SYN-ACK can ACK. A mid-stream pickup's
-    /// stream knows no ISN, but its late SYN lies right before its first
-    /// byte, which the late SYN-ACK ACKs (as in C4).
+    /// to the handshake, the exact evidence first: it has the ISN of its
+    /// sender's observed SYN (a retransmitted SYN can carry more TCP Fast
+    /// Open bytes, which a late SYN-ACK can ACK), or it is a SYN-ACK and the
+    /// other stream's observed SYN decides, which it ACKs (up to the end of
+    /// the SYN's TCP Fast Open bytes) or not. Only where no observed SYN
+    /// speaks does a mid-stream pickup's first byte, before which its late
+    /// SYN lies and which the late SYN-ACK ACKs (as in C4): the first byte
+    /// the capture showed is no evidence against an observed SYN.
     pub fn is_own_handshake(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = self.roles(source);
         if let Some(syn) = self.syns[own].as_mut().filter(|syn| syn.is_syn(tcp)) {
             syn.len = syn.len.max(tcp.payload().len() as u32);
             return true;
         }
-        let at_pickup_start = |stream: usize, seq: u32| {
-            self.syns[stream].is_none() && Some(seq) == self.first[stream]
-        };
         let ack = tcp.acknowledgment_number();
-        at_pickup_start(own, tcp.sequence_number().wrapping_add(1))
-            || (tcp.ack()
-                && (self.syns[other].is_some_and(|syn| syn.is_acked_by(ack))
-                    || at_pickup_start(other, ack)))
+        if let Some(syn) = self.syns[other].filter(|_| tcp.ack()) {
+            return syn.is_acked_by(ack);
+        }
+        let at_pickup_start = |stream: usize, seq: u32| Some(seq) == self.first[stream];
+        self.syns[own].is_none()
+            && (at_pickup_start(own, tcp.sequence_number().wrapping_add(1))
+                || (tcp.ack() && at_pickup_start(other, ack)))
     }
 
     /// Returns true if `tcp`, sent by `source` and no SYN, is a late segment

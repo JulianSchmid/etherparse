@@ -1740,38 +1740,29 @@ impl ReferenceModel {
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` is the own one of its
-    /// sender's stream: it ACKs the other stream's observed SYN, or it lies
-    /// where the stream's SYN can (see [`ReferenceModel::is_own_syn`]),
-    /// unless it is a SYN-ACK into a stream without an observed start that
-    /// doesn't ACK the other stream's observed SYN, which answers another
-    /// SYN (C2).
+    /// sender's stream, the exact evidence first: the stream's observed ISN
+    /// (see [`ReferenceModel::is_own_syn`]); else, for a SYN-ACK, whether it
+    /// ACKs the other stream's observed SYN or answers another SYN (C2);
+    /// else a pickup's late SYN right at its first byte or, before a FIN of
+    /// the connection, where the stream's SYN can lie (C4).
     fn is_own_handshake_half(&self, segment: &TestSegment) -> bool {
-        let sender = role_index(self.sender_role(segment));
+        let same_script = Some(segment.incarnation) == self.incarnation;
+        let stream = &self.streams[role_index(self.sender_role(segment))];
         let other = &self.streams[role_index(self.sender_role(segment).other())];
-        let acks_observed_syn = Some(segment.incarnation) == self.incarnation
-            && match (other.base, segment.ack) {
-                (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
-                _ => false,
-            };
-        let answers_other_syn = segment.header.ack
-            && other.observed
-            && false == acks_observed_syn
-            && false == self.streams[sender].observed;
-        // a pickup's own late SYN arrives among its stream's first segments:
-        // once the stream started and a FIN of the connection was seen, a SYN
-        // in its A5 range is a reconnect's (C4), unless it lies right at the
-        // stream's first byte
+        if stream.observed {
+            return self.is_own_syn(segment);
+        }
+        if segment.header.ack && other.observed {
+            return segment
+                .ack
+                .is_some_and(|ack| other.acks_syn_of(ack, same_script));
+        }
         let closing = self
             .streams
             .iter()
             .any(|stream| stream.fin_offset.is_some());
-        let stream = &self.streams[sender];
-        let after_close = false == stream.observed
-            && stream.base.is_some()
-            && closing
-            && stream.first_offset() != Some(segment.offset as i64);
-        self.answers_observed_syn(segment)
-            || (false == answers_other_syn && false == after_close && self.is_own_syn(segment))
+        (same_script && Some(segment.offset as i64) == stream.first_offset())
+            || (false == (stream.base.is_some() && closing) && self.is_own_syn(segment))
     }
 
     /// Range before and after the bytes of the stream of `role` that its
@@ -1784,9 +1775,9 @@ impl ReferenceModel {
 
     /// Returns true if the SYN or SYN-ACK `segment` belongs to the handshake
     /// of the connection: it comes from the connection's script, and it has
-    /// the ISN of its sender's stream, or it is a SYN-ACK that ACKs the
-    /// observed start of the other stream, or it lies right at the first
-    /// byte of a mid-stream pickup's stream.
+    /// the ISN of its sender's stream, or it is a SYN-ACK and ACKs the
+    /// observed start of the other stream, or, where no observed SYN speaks,
+    /// it lies right at the first byte of a mid-stream pickup's stream.
     fn is_own_handshake(&self, segment: &TestSegment) -> bool {
         let stream = &self.streams[role_index(self.sender_role(segment))];
         let other = &self.streams[role_index(self.sender_role(segment).other())];
@@ -1795,16 +1786,21 @@ impl ReferenceModel {
             (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
             _ => false,
         };
-        // a pickup's stream knows no ISN, but its late SYN lies right before
-        // its first byte, which the late SYN-ACK ACKs (as in C4)
-        let at_pickup_start = |stream: &ModelStream, offset: u64| {
-            false == stream.observed && Some(offset as i64) == stream.first_offset()
-        };
+        // the observed SYN of the other stream decides for a SYN-ACK; only
+        // where no observed SYN speaks does a pickup's first byte, before
+        // which its late SYN lies and which the late SYN-ACK ACKs (as in C4)
+        let at_pickup_start =
+            |stream: &ModelStream, offset: u64| Some(offset as i64) == stream.first_offset();
         self.has_isn_of_sender(segment)
             || (Some(segment.incarnation) == self.incarnation
-                && ((other.observed && acks_syn)
-                    || at_pickup_start(stream, segment.offset)
-                    || segment.ack.is_some_and(|ack| at_pickup_start(other, ack))))
+                && match (segment.ack, other.observed) {
+                    (Some(_), true) => acks_syn,
+                    _ => {
+                        false == stream.observed
+                            && (at_pickup_start(stream, segment.offset)
+                                || segment.ack.is_some_and(|ack| at_pickup_start(other, ack)))
+                    }
+                })
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` comes from the

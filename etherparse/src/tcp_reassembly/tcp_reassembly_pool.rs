@@ -1954,6 +1954,84 @@ mod test {
             assert_eq!((1, 0), (pool.stats().tombstones, pool.stats().connections));
         }
 
+        // a pickup's first captured byte is only where the capture started,
+        // so a reconnect's ISN + 1 can lie right there: the old client's
+        // observed SYN decides for the new SYN-ACK first, which ACKs another
+        // SYN, so it starts the reconnect on the tombstone, and the response
+        // the capture shows before the request is the reconnect's (C1)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Responder, b"banner")
+                .send(Responder, b"more")
+                .send(Initiator, b"request")
+                .rst(Responder);
+            // the capture lost the SYN-ACK and the banner: the server's
+            // stream is a pickup that starts at 2007
+            for index in [0, 2, 4, 5] {
+                old.segments[index].feed(&mut pool, 1);
+            }
+            let processed = old.segments[6].feed(&mut pool, 1);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                processed.ended.unwrap().end()
+            );
+            let mut script = ConnectionScript::with_isns(1005, 2006);
+            script
+                .handshake()
+                .send(Initiator, b"new-request")
+                .send(Responder, b"new-response");
+            // SYN-ACK, SYN, ACK, response, request
+            for index in [1, 0, 2, 4, 3] {
+                let processed = script.segments[index].feed(&mut pool, 2);
+                assert_eq!(None, processed.ignored, "segment {index}");
+            }
+            let connection = pool.iter_mut().next().unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"new-request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"new-response"),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
+        // a SYN-ACK that ACKs the client's observed SYN is the server's own
+        // whatever the heuristics of its pickup say: one reordered behind the
+        // server's later bytes and the client's FIN is the pickup's own late
+        // SYN-ACK (C4), which A5 takes while the pickup wasn't read from and
+        // ignores once it was, and no reconnect
+        for eager in [false, true] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Responder, b"abc")
+                .send(Initiator, b"request")
+                .send(Responder, b"response")
+                .fin(Initiator);
+            // the capture lost "abc" and shows the SYN-ACK last
+            for index in [0, 2, 4, 5, 6, 1] {
+                let processed = script.segments[index].feed(&mut pool, 3);
+                assert!(processed.ended.is_none(), "{eager}, segment {index}");
+                let (connection, _) = processed.active.unwrap();
+                assert_eq!(TcpConnectionId(0), connection.id());
+                while let (true, TcpRead::Data(data)) =
+                    (eager, connection.stream_mut(Responder).read_received())
+                {
+                    let len = data.len();
+                    connection.stream_mut(Responder).consume(len);
+                }
+            }
+            let connection = pool.iter_mut().next().unwrap();
+            let isn = connection.stream(Responder).isn();
+            assert_eq!((false == eager).then_some(2000), isn, "{eager}");
+            assert_eq!(1, pool.stats().connections);
+        }
+
         // the tombstone of a reconnect absorbs late duplicates of the replaced
         // connection's handshake as well (C1): one that arrives after the
         // reconnect finished is ignored, while a SYN with a third ISN starts
