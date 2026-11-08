@@ -98,14 +98,15 @@ pub struct TcpStream {
     /// the memory limits (0 without one). Holes before it are overdue.
     rejected_end: u64,
 
-    /// Number of the connection's packet that moved the seen ACK forward
-    /// and the seen ACK after it, for the packets of the last
+    /// Number of the connection's packet that moved the seen or the implied
+    /// ACK forward and that ACK after it, for the packets of the last
     /// `ack_reorder_tolerance` ones that did so while there were holes, or
     /// while a prepend could add one.
     recent_acks: VecDeque<(u64, u64)>,
 
-    /// Seen ACK as it was `ack_reorder_tolerance` packets ago (holes before
-    /// it were covered long enough to be overdue).
+    /// The higher of the seen and the implied ACK as it was
+    /// `ack_reorder_tolerance` packets ago (holes before it were covered
+    /// long enough to be overdue).
     settled_ack: u64,
 
     /// Latest data segment that started after the receiver's window, where
@@ -348,17 +349,13 @@ impl TcpStream {
             .map_or(0, |ack| u64::try_from(ack).unwrap_or(0))
     }
 
-    /// Returns true if all of `hole` lies before the implied ACK, if the
-    /// seen ACK has covered all of it for `ack_reorder_tolerance` packets, or
-    /// if it lies before rejected bytes.
+    /// Returns true if the seen or the implied ACK has covered all of `hole`
+    /// for `ack_reorder_tolerance` packets, or if it lies before rejected
+    /// bytes.
     fn is_overdue(&self, hole: &Range<u64>) -> bool {
         // once bytes are rejected, the hole they end in grows with every
         // rejected segment, so the implied ACK never passes it
-        hole.end
-            <= self
-                .implied_ack()
-                .max(self.settled_ack)
-                .max(self.rejected_end)
+        hole.end <= self.settled_ack.max(self.rejected_end)
     }
 
     /// Offset of the next byte to read.
@@ -410,8 +407,8 @@ impl TcpStream {
     /// Reading stops at the first hole until a retransmission fills it or
     /// it is given up (see [`TcpStream::give_up_hole`]). A hole is also
     /// given up once it is overdue and the read position reaches it. A hole
-    /// is overdue if it lies before the implied ACK (see
-    /// [`TcpStream::acked_offset`]), or if a seen ACK has covered it for
+    /// is overdue if a seen or the implied ACK (see
+    /// [`TcpStream::acked_offset`]) has covered it for
     /// [`TcpReassemblyConfig::ack_reorder_tolerance`] packets, as the
     /// receiver must have received its bytes. Holes before bytes that the
     /// stream rejected (see [`TcpStreamStatus::rejected_bytes`]) are overdue
@@ -1522,7 +1519,18 @@ impl TcpStream {
             let implied_ack = i64::try_from(sent)
                 .unwrap_or(i64::MAX)
                 .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
+            let moved = self.implied_ack.is_none_or(|implied| implied < implied_ack);
             self.implied_ack = self.implied_ack.max(Some(implied_ack));
+            // like a seen ACK, the implied ACK gives holes up only after
+            // `ack_reorder_tolerance` packets: a capture merged from two taps
+            // can show the receiver's larger window late, so the window it
+            // assumes can be too small for a while
+            if moved
+                && 0 < implied_ack
+                && (false == self.buffer.holes().is_empty() || self.can_prepend())
+            {
+                self.add_recent_ack(packet, implied_ack as u64);
+            }
         }
         // ACKs reordered against the data in a capture can come first, so
         // a covered hole stays fillable for some packets
@@ -1531,7 +1539,7 @@ impl TcpStream {
             if ack_packet.saturating_add(tolerance) > packet {
                 break;
             }
-            self.settled_ack = ack;
+            self.settled_ack = self.settled_ack.max(ack);
             self.recent_acks.pop_front();
         }
         if self.buffer.holes().is_empty() && false == self.can_prepend() {
@@ -1620,8 +1628,19 @@ impl TcpStream {
         // only holes can become overdue by the ACK, also ones that a
         // prepend adds before it
         if false == self.buffer.holes().is_empty() || self.can_prepend() {
-            self.recent_acks.push_back((packet, self.seen_ack));
+            self.add_recent_ack(packet, self.seen_ack);
         }
+    }
+
+    /// Records that the seen or the implied ACK moved forward to `ack` in
+    /// the packet with the number `packet`, in the order of the packets: a
+    /// kept ACK counts with the number of the packet that carried it (K1),
+    /// which can be older than the implied ACK's latest move.
+    fn add_recent_ack(&mut self, packet: u64, ack: u64) {
+        let index = self
+            .recent_acks
+            .partition_point(|(ack_packet, _)| *ack_packet <= packet);
+        self.recent_acks.insert(index, (packet, ack));
     }
 
     /// Records the data after the receiver's window `candidate` as the latest
@@ -2113,6 +2132,7 @@ mod test {
             (None, TcpRead::Pending),
         ] {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 hole_give_up_window_factor: factor,
                 fallback_window: 2,
                 ..Default::default()
@@ -2410,6 +2430,34 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpRead::Data(b"b"), stream.read_received());
+            stream.consume(1);
+            assert_eq!(expected, stream.read_received());
+        }
+
+        // the same with an implied ACK that moved after the kept ACK's
+        // packet: the kept ACK still counts N packets after its own packet,
+        // before the implied ACK's later move (the capture starts at the
+        // responder's byte, which ACKs the initiator's byte 3, then come
+        // more than k windows of the initiator's bytes from 3 on, and byte 0
+        // last)
+        for (tolerance, expected) in [(2, TcpRead::Gap { len: Some(2) }), (3, TcpRead::Pending)] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ack_reorder_tolerance: tolerance,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 3)
+                .send(Responder, b"x")
+                .send(Initiator, b"defghijk")
+                .send_at(Initiator, 0, b"a");
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"a"), stream.read_received());
             stream.consume(1);
             assert_eq!(expected, stream.read_received());
         }
@@ -2817,6 +2865,7 @@ mod test {
         {
             let config = TcpReassemblyConfig {
                 fallback_window: 2,
+                ack_reorder_tolerance: 0,
                 ..Default::default()
             };
             let mut pool = TcpReassemblyPool::<(), ()>::new(config);
@@ -2896,8 +2945,11 @@ mod test {
         // a capture merged from two taps can show the receiver's first scaled
         // window late: until then, its SYN's window, which is never scaled,
         // only bounds its window from below, so it is unknown (S3), and the
-        // implied ACK goes by the fallback window (regression test: with the
-        // SYN's window, a reordered segment became a gap)
+        // implied ACK goes by the fallback window, and once known, the
+        // implied ACK gives holes up only after `ack_reorder_tolerance`
+        // packets, like a seen ACK, as a larger window can show late too (K2,
+        // K4(a); regression test: with the SYN's window, a reordered segment
+        // became a gap)
         for acked in [false, true] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -2914,6 +2966,52 @@ mod test {
             script.ack(Initiator);
             // the second segment after the others, the initiator's ACKs last
             let order = [0, 1, 3, 5, 6, 7, 8, 9, 10, 11, 4, 2, 12];
+            let mut got = Vec::new();
+            for index in order {
+                let (connection, _) = script.segments[index].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Responder);
+                loop {
+                    let read = if acked {
+                        stream.read_acked()
+                    } else {
+                        stream.read_received()
+                    };
+                    match read {
+                        TcpRead::Data(data) => {
+                            got.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => panic!("gap of {len:?} at {}", got.len()),
+                        _ => break,
+                    }
+                }
+            }
+            assert!(sent == got, "{acked}");
+        }
+
+        // the same for a window that grows after the handshake and that a
+        // capture merged from two taps shows late, so the implied ACK goes
+        // by the smaller window for a while: it gives holes up only after
+        // `ack_reorder_tolerance` packets (K4(a); regression test: a
+        // reordered segment became a gap)
+        for acked in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(4); 2];
+            script.window_size = 3000;
+            script.handshake();
+            // 2992 after the SYN, then 48000
+            script.segments[2].header.window_size = 187;
+            script.ack(Initiator);
+            let mut sent = Vec::new();
+            for i in 0..9u8 {
+                sent.extend_from_slice(&[i; 1000]);
+                script.send(Responder, &[i; 1000]);
+            }
+            script.ack(Initiator);
+            // the second segment after the others, the window's update late
+            let order = [0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12, 5, 3, 13];
             let mut got = Vec::new();
             for index in order {
                 let (connection, _) = script.segments[index].feed(&mut pool, ()).active.unwrap();
@@ -3374,6 +3472,7 @@ mod test {
         // offset, with one gap per lost range
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
@@ -3719,6 +3818,7 @@ mod test {
         // read position reaches it
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
@@ -4052,6 +4152,7 @@ mod test {
         // an overdue hole at the read position is a gap already
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
@@ -4185,7 +4286,11 @@ mod test {
 
         // steps onto an overdue hole, which is given up right away
         {
-            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_size = 5;
             script
@@ -4196,8 +4301,9 @@ mod test {
                 let (connection, _) = script.feed_all(&mut pool).active.unwrap();
                 let stream = connection.stream_mut(Initiator);
                 stream.read_received();
+                // the ACK covered the hole, so it is a gap already
                 stream.consume(3);
-                assert!(stream.give_up_hole());
+                assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
             }
             // a hole after the gap, overdue once the implied ACK (11) passes
             // it
@@ -4403,6 +4509,7 @@ mod test {
         // read position reaches it (the discarded part doesn't count)
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 4,
                 ..Default::default()
             };
@@ -5538,6 +5645,7 @@ mod test {
         // an overdue hole is listed until the read position reaches it
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
@@ -6227,6 +6335,7 @@ mod test {
         // position reaches it, as late segments can still fill it
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
@@ -6597,6 +6706,7 @@ mod test {
         // an overdue hole counts as a gap once the read position reaches it
         {
             let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
                 fallback_window: 2,
                 ..Default::default()
             };
