@@ -116,6 +116,12 @@ pub struct TcpStream {
     /// (`None` once the stream moved forward).
     resync_ack: Option<u32>,
 
+    /// Highest ACK number of the receiver that lay more than one window
+    /// after the bytes the sender is known to have sent, which counts once
+    /// they reach within one window of it: a capture merged from two taps
+    /// can show an ACK long before the bytes it ACKs (K1).
+    leading_ack: Option<u32>,
+
     /// Offset at which the stream continued after its last resync (0
     /// without one). Bytes, FINs and ACKs before it were sent before the
     /// jump.
@@ -156,6 +162,7 @@ impl TcpStream {
             settled_ack: 0,
             resync_candidate: None,
             resync_ack: None,
+            leading_ack: None,
             resync_offset: 0,
             resync_forced: false,
             connection_end: None,
@@ -1380,6 +1387,31 @@ impl TcpStream {
         }
     }
 
+    /// Applies the leading ACK once the sender's bytes reach within one
+    /// window of it, as an ACK of the packet with the number `packet`, where
+    /// `window` is the receiver's receive window (`None` while it is
+    /// unknown).
+    fn apply_leading_ack(
+        &mut self,
+        window: Option<u64>,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        let window = window.unwrap_or(u64::from(config.fallback_window));
+        let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
+        let reach =
+            i64::try_from(sent_end.saturating_add(self.sent_into(window))).unwrap_or(i64::MAX);
+        let reached = self.leading_ack.filter(|ack| {
+            self.start_seq
+                .and_then(|start_seq| self.offset(start_seq, *ack))
+                .is_some_and(|ack| ack <= reach)
+        });
+        if let Some(ack) = reached {
+            self.leading_ack = None;
+            self.add_ack(ack, window, packet, config);
+        }
+    }
+
     /// Updates what the receiver must have received after the packet with
     /// the number `packet` of the connection, where `window` is the
     /// receiver's receive window (`None` while it is unknown).
@@ -1390,6 +1422,7 @@ impl TcpStream {
         config: &TcpReassemblyConfig,
     ) {
         self.apply_kept_ack(window, config);
+        self.apply_leading_ack(window, packet, config);
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);
@@ -1539,7 +1572,16 @@ impl TcpStream {
                 }
                 self.add_jump_ack(ack_seq, window, packet, config);
             }
-            _ => self.resync_ack = Some(ack_seq),
+            _ => {
+                self.resync_ack = Some(ack_seq);
+                // the highest ACK counts later, a capture can reorder them
+                if self
+                    .leading_ack
+                    .is_none_or(|leading| 0 < ack_seq.wrapping_sub(leading) as i32)
+                {
+                    self.leading_ack = Some(ack_seq);
+                }
+            }
         }
     }
 
@@ -1577,6 +1619,7 @@ impl TcpStream {
         self.resync_offset = offset;
         self.resync_candidate = None;
         self.resync_ack = None;
+        self.leading_ack = None;
         self.resync_forced = false;
         self.status.resyncs += 1;
         start_seq
@@ -4811,7 +4854,10 @@ mod test {
 
         // ACKs count up to one window after the highest offset, using the
         // largest window the receiver advertised before the ACK: the sender
-        // can have sent into it before the window shrank (e.g. to 0)
+        // can have sent into it before the window shrank (e.g. to 0); one
+        // further ahead counts once the bytes reach within one window of it
+        // (here the ACK of 103 makes the ACK of 104 count), as a capture
+        // merged from two taps can show an ACK long before the bytes it ACKs
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -4827,7 +4873,7 @@ mod test {
                 .ack_to(Responder, 204)
                 .ack_to(Responder, 305);
             script.feed(&mut pool, ..4);
-            for (segment, expected) in script.segments[4..].iter().zip([0, 103, 203, 204, 204]) {
+            for (segment, expected) in script.segments[4..].iter().zip([0, 104, 203, 204, 204]) {
                 let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
                 assert_eq!(expected, connection.stream(Initiator).acked_offset());
             }

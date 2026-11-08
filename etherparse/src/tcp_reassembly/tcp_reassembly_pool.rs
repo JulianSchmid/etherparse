@@ -2032,6 +2032,57 @@ mod test {
             assert_eq!(1, pool.stats().connections);
         }
 
+        // a capture merged from two taps whose server tap lags far behind
+        // shows the client's ACKs more than a window ahead of the bytes they
+        // ACK: each counts once the bytes reach within a window of it (K1),
+        // so the ACK of the server's FIN finishes the connection, and a
+        // reader of the ACKed bytes gets all of them
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            let mut sent = Vec::new();
+            for i in 0..400u32 {
+                let data = [(i % 251) as u8; 1460];
+                sent.extend_from_slice(&data);
+                script.send(Responder, &data);
+                if 1 == i % 2 {
+                    script.ack(Initiator);
+                }
+            }
+            script
+                .fin(Responder)
+                .ack(Initiator)
+                .fin(Initiator)
+                .ack(Responder);
+            // the server's segments arrive 75 positions (50 of its segments,
+            // 73 KB) late
+            let mut order: Vec<(usize, usize)> = script
+                .segments
+                .iter()
+                .enumerate()
+                .map(|(i, segment)| (i + usize::from(Responder == segment.sender) * 75, i))
+                .collect();
+            order.sort();
+            let mut ended = None;
+            for (_, index) in order {
+                if let Some(connection) = script.segments[index].feed(&mut pool, 1).ended {
+                    ended = Some(connection);
+                }
+            }
+            let mut connection = ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Responder);
+            let mut got = Vec::new();
+            while let TcpRead::Data(data) = stream.read_acked() {
+                got.extend_from_slice(data);
+                let len = data.len();
+                stream.consume(len);
+            }
+            assert_eq!(sent.len(), got.len());
+            assert!(sent == got);
+        }
+
         // the tombstone of a reconnect absorbs late duplicates of the replaced
         // connection's handshake as well (C1): one that arrives after the
         // reconnect finished is ignored, while a SYN with a third ISN starts

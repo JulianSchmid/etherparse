@@ -176,6 +176,10 @@ struct ModelStream {
     /// True offset of the latest ACK more than one window after the bytes
     /// known to be sent, while the stream didn't move forward.
     resync_ack: Option<u64>,
+    /// True offset of the highest ACK more than one window after the bytes
+    /// known to be sent, which counts once they reach within one window of
+    /// it (K1).
+    leading_ack: Option<u64>,
     /// Whether the next data segment is the stream's new start.
     forced: bool,
     /// What reading returns away from the FIN once nothing more is
@@ -899,6 +903,7 @@ impl ModelStream {
         self.resyncs.push((self.highest, self.shift));
         self.candidates.clear();
         self.resync_ack = None;
+        self.leading_ack = None;
         self.forced = false;
     }
 
@@ -943,7 +948,13 @@ impl ModelStream {
                     }
                     self.add_jump_ack(ack, window, packet, config);
                 }
-                _ => self.resync_ack = Some(ack),
+                _ => {
+                    self.resync_ack = Some(ack);
+                    // the highest ACK counts later, a capture can reorder them
+                    if self.leading_ack.is_none_or(|leading| leading < ack) {
+                        self.leading_ack = Some(ack);
+                    }
+                }
             }
             return;
         }
@@ -1017,6 +1028,26 @@ impl ModelStream {
         }
     }
 
+    /// Applies the leading ACK once the bytes reach within one window of
+    /// it, as an ACK of the packet with the number `packet`.
+    fn apply_leading_ack(
+        &mut self,
+        window: Option<u64>,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        let window = window.unwrap_or(u64::from(config.fallback_window));
+        let sent_end = self.highest + u64::from(self.fin_offset.is_some());
+        let reach = sent_end + window.max(self.largest_window.unwrap_or(0));
+        let reached = self
+            .leading_ack
+            .filter(|ack| self.base.is_some() && *ack as i64 - self.shift <= reach as i64);
+        if let Some(ack) = reached {
+            self.leading_ack = None;
+            self.add_ack(ack, window, packet, config);
+        }
+    }
+
     /// Applies the kept ACK, updates the implied ACK and the ACK of
     /// `ack_reorder_tolerance` packets ago after the packet with the number
     /// `packet`, where `window` is the receive window of the stream's
@@ -1024,6 +1055,7 @@ impl ModelStream {
     /// at the read offset.
     fn after_packet(&mut self, window: Option<u64>, packet: u64, config: &TcpReassemblyConfig) {
         self.apply_kept_ack(window, config);
+        self.apply_leading_ack(window, packet, config);
         if let Some(window) = window {
             self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
         }
