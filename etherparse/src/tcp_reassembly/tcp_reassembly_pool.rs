@@ -2088,8 +2088,14 @@ mod test {
         // before the close, but the stream moved forward after them, so the
         // window the client accepts reaches past them (S4), and the bytes
         // after the burst land behind a hole of its length, which K2 gives
-        // up in time; an eager reader gets every captured byte and one gap
-        {
+        // up in time; an eager reader gets every captured byte and one gap.
+        // Mirrored, the client's tap lags past k windows: its ACKs trail the
+        // bytes, so after the burst every segment lies after the window
+        // until an ACK moves the stream forward towards them, then the
+        // window reaches past them too (the leading data, S4), and the bytes
+        // after them land behind one hole: the burst and the two segments
+        // before the ACK (regression test: the rest of the stream was lost)
+        for (lagging, lag, first_after_gap) in [(Responder, 75, 300), (Initiator, 150, 302)] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.handshake().send(Initiator, b"request");
@@ -2098,7 +2104,7 @@ mod test {
             for i in 0..600u32 {
                 let data = [(i % 251) as u8; 1460];
                 let lost_by_capture = (200..300).contains(&i);
-                if false == lost_by_capture {
+                if false == (200..first_after_gap).contains(&i) {
                     captured.extend_from_slice(&data);
                 }
                 script.send(Responder, &data);
@@ -2113,13 +2119,17 @@ mod test {
                 .ack(Initiator)
                 .fin(Initiator)
                 .ack(Responder);
-            // the handshake and the request first
+            // the server's tap lags from its SYN-ACK on, the client's after
+            // its request
             let mut order: Vec<(usize, usize)> = script
                 .segments
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| *i < 4 || false == lost.get(i - 4).copied().unwrap_or(false))
-                .map(|(i, segment)| (i + usize::from(Responder == segment.sender) * 75, i))
+                .map(|(i, segment)| {
+                    let lags = lagging == segment.sender && (Responder == lagging || 4 <= i);
+                    (i + usize::from(lags) * lag, i)
+                })
                 .collect();
             order.sort();
             let (mut got, mut gaps) = (Vec::new(), Vec::new());
@@ -2150,8 +2160,9 @@ mod test {
                     ended = connection;
                 }
             }
+            let gap = (first_after_gap - 200) as u64 * 1460;
             assert_eq!(Some(TcpConnectionEnd::Finished), ended.unwrap().end());
-            assert_eq!(vec![Some(146_000)], gaps);
+            assert_eq!(vec![Some(gap)], gaps);
             assert_eq!(captured.len(), got.len());
             assert!(captured == got);
         }

@@ -181,6 +181,10 @@ struct ModelStream {
     /// it (K1), and whether the stream moved forward since: then the window
     /// the receiver accepts reaches past it (S4).
     leading_ack: Option<(u64, bool)>,
+    /// True offset after the latest data after the window that ACKs moved
+    /// the stream forward towards, which the window reaches past if the
+    /// buffer can hold it (S4).
+    leading_data: Option<u64>,
     /// Whether the next data segment is the stream's new start.
     forced: bool,
     /// What reading returns away from the FIN once nothing more is
@@ -213,8 +217,11 @@ impl ModelStream {
     ///   are put in front (see [`ModelStream::can_prepend`]), other bytes
     ///   before it count as out-of-window (once per segment);
     /// - a segment with bytes or a FIN starting more than k windows after
-    ///   the highest or the ACKed offset is counted and not stored (k is the
-    ///   hole give up window factor, 2 without one). If its bytes lie within
+    ///   the highest or the ACKed offset, a leading ACK the stream moved
+    ///   forward after, and the leading data (the end of the candidate an
+    ///   ACK moved the stream forward towards, if the buffer can hold it) is
+    ///   counted and not stored (k is the hole give up window factor, 2
+    ///   without one). If its bytes lie within
     ///   one window of the last ACK more than one window after the bytes
     ///   sent, or if it is the n-th consecutive such segment that lies within
     ///   one window of the one before (with `resync_after_segments = n`),
@@ -308,16 +315,21 @@ impl ModelStream {
         // offsets leave out the jumps of the resyncs so far
         let mut start = segment.offset as i64 - self.shift;
 
-        // a leading ACK the stream moved forward after shows the sender sent
-        // that far
+        // a leading ACK the stream moved forward after, and the leading data,
+        // show the sender sent that far
         let leading = self
             .leading_ack
             .filter(|(_, moved)| *moved)
             .map_or(0, |(ack, _)| {
                 u64::try_from(ack as i64 - self.shift).unwrap_or(0)
             });
-        let window_end =
-            (self.ack.max(self.highest).max(leading) + u64::from(factor) * sent_into) as i64;
+        let leading_data = self
+            .leading_data
+            .and_then(|end| u64::try_from(end as i64 - self.shift).ok())
+            .filter(|end| *end <= self.read_offset + config.max_stream_buffer as u64)
+            .unwrap_or(0);
+        let window_end = (self.ack.max(self.highest).max(leading).max(leading_data)
+            + u64::from(factor) * sent_into) as i64;
         let mut after_window = start > window_end;
         let mut jump_ack = None;
         if false == payload.is_empty() && false == header.syn && self.fin_offset.is_none() {
@@ -892,6 +904,10 @@ impl ModelStream {
     /// anymore, and the window reaches past a leading ACK.
     fn set_highest(&mut self, offset: u64) {
         if offset > self.highest {
+            // the data after the window becomes the leading data
+            if let Some(candidate) = self.candidates.last() {
+                self.leading_data = self.leading_data.max(Some(candidate.bytes.end));
+            }
             self.candidates.clear();
             self.resync_ack = None;
             if let Some((_, moved)) = self.leading_ack.as_mut() {
@@ -917,6 +933,7 @@ impl ModelStream {
         self.candidates.clear();
         self.resync_ack = None;
         self.leading_ack = None;
+        self.leading_data = None;
         self.forced = false;
     }
 

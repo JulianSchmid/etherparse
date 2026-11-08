@@ -127,6 +127,12 @@ pub struct TcpStream {
     /// accepts reaches past the ACK (S4).
     leading_ack: Option<LeadingAck>,
 
+    /// Sequence number after the latest data after the receiver's window
+    /// that the stream's ACKs moved it forward towards: the sender sent that
+    /// far, and a lagging tap holds back the ACKs that would let the window
+    /// reach the data, so the window reaches past it (S4).
+    leading_data: Option<u32>,
+
     /// Offset at which the stream continued after its last resync (0
     /// without one). Bytes, FINs and ACKs before it were sent before the
     /// jump.
@@ -168,6 +174,7 @@ impl TcpStream {
             resync_candidate: None,
             resync_ack: None,
             leading_ack: None,
+            leading_data: None,
             resync_offset: 0,
             resync_forced: false,
             connection_end: None,
@@ -783,20 +790,29 @@ impl TcpStream {
 
     /// Offset after which the receiver with the receive window `window`
     /// doesn't accept bytes: k windows after the seen ACK, the highest
-    /// offset, or a leading ACK the stream moved forward after (the sender
-    /// sent that far, a lagging tap holds the bytes back).
+    /// offset, a leading ACK the stream moved forward after, or the leading
+    /// data (the sender sent that far, a lagging tap holds the bytes or the
+    /// ACKs back), if the stream's buffer can hold that data (D4; a jump
+    /// lies there by chance only).
     fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
-        let leading = self
+        let offset = |seq: u32| {
+            let start_seq = self.start_seq?;
+            u64::try_from(self.offset(start_seq, seq)?).ok()
+        };
+        let leading_ack = self
             .leading_ack
             .filter(|leading| leading.moved)
-            .and_then(|leading| {
-                let start_seq = self.start_seq?;
-                u64::try_from(self.offset(start_seq, leading.seq)?).ok()
-            })
+            .and_then(|leading| offset(leading.seq))
+            .unwrap_or(0);
+        let leading_data = self
+            .leading_data
+            .and_then(offset)
+            .filter(|end| *end <= self.read_offset() + config.max_stream_buffer as u64)
             .unwrap_or(0);
         self.seen_ack
             .max(self.highest_offset())
-            .max(leading)
+            .max(leading_ack)
+            .max(leading_data)
             .saturating_add(window_range(self.sent_into(window), config))
     }
 
@@ -1230,9 +1246,19 @@ impl TcpStream {
     }
 
     /// The highest offset moved forward, so the stream didn't jump, also not
-    /// to a leading ACK.
+    /// to a leading ACK or to the data after the window: data after the
+    /// window becomes the leading data, as only ACKs move the stream
+    /// forward while it waits (other bytes drop it first, see
+    /// [`TcpStream::place`]).
     fn moved_forward(&mut self) {
-        self.resync_candidate = None;
+        if let Some(candidate) = self.resync_candidate.take() {
+            let further = self
+                .leading_data
+                .is_none_or(|end| 0 < candidate.end.wrapping_sub(end) as i32);
+            if further {
+                self.leading_data = Some(candidate.end);
+            }
+        }
         self.resync_ack = None;
         if let Some(leading) = self.leading_ack.as_mut() {
             leading.moved = true;
@@ -1683,6 +1709,7 @@ impl TcpStream {
         self.resync_candidate = None;
         self.resync_ack = None;
         self.leading_ack = None;
+        self.leading_data = None;
         self.resync_forced = false;
         self.status.resyncs += 1;
         start_seq
@@ -7552,6 +7579,32 @@ mod test {
             script.send_at(Initiator, 1000, b"GET /");
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(resyncs, connection.stream(Initiator).status().resyncs);
+        }
+
+        // data after the window that an ACK moved the stream forward towards
+        // is the leading data, which the window reaches past (S4), as a
+        // lagging tap holds the ACKs back, but only if the stream's buffer
+        // can hold it: further away, it is a jump, and the bytes after it
+        // are data after the window again, which an ACK confirms
+        for (max_stream_buffer, resyncs) in [(10_000, 0), (1000, 1)] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 5000, b"GET /")
+                .ack_to(Responder, 50)
+                .send_at(Initiator, 5005, b"xyz")
+                .ack_to(Responder, 5008);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(resyncs, stream.status().resyncs);
+            assert_eq!(0, stream.status().rejected_bytes);
         }
 
         // a resync ends the jumps the stream may have made before: an ACK
