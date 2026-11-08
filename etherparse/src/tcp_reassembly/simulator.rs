@@ -1608,10 +1608,22 @@ mod test {
                 s.sender == half.sender && (false == s.payload.is_empty() || s.header.fin)
             });
             let observed = |role: TcpRole| observed_start(&before, role);
+            // a keep-alive (one byte that ends at the other side's last ACK)
+            // doesn't start a pickup (A4)
             let first_byte = before
                 .iter()
-                .find(|s| s.sender == half.sender && false == s.payload.is_empty())
-                .map(|s| s.offset);
+                .enumerate()
+                .filter(|(_, s)| s.sender == half.sender && false == s.payload.is_empty())
+                .find(|(k, s)| {
+                    let acked = before[..*k]
+                        .iter()
+                        .rev()
+                        .find(|o| o.sender != half.sender && o.ack.is_some())
+                        .and_then(|o| o.ack);
+                    let keep_alive = 1 == s.payload.len() && false == s.header.fin;
+                    false == (keep_alive && Some(s.offset + 1) == acked)
+                })
+                .map(|(_, s)| s.offset);
             started
                 && false == observed(half.sender)
                 && before.iter().any(|s| s.header.fin)
