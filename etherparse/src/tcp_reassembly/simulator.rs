@@ -1832,8 +1832,9 @@ mod test {
         tap_before_loss: bool,
         /// Chance in 1000 that the capture loses a segment.
         capture_loss: u64,
-        /// Positions each tap lags behind, indexed by role (within K4(b)'s
-        /// tolerance, counting the ACKs in between).
+        /// Positions each tap lags behind, indexed by role: the server's
+        /// within K4(b)'s tolerance, counting the ACKs in between, the
+        /// client's also past k windows.
         lag: [u64; 2],
         /// Server segments the capture misses in a row (a burst), from the
         /// first one on, if any.
@@ -1848,14 +1849,15 @@ mod test {
 
     impl Bulk {
         /// A random bulk transfer, or `None` if its sender would keep more
-        /// than a window in flight (it waits for the retransmission).
+        /// than a window in flight: while it waits for a retransmission, or
+        /// with the two segments the client ACKs at a time.
         fn any(rng: &mut Rng) -> Option<Bulk> {
             let scale = [None, Some(2), Some(7)][rng.below(3) as usize];
             let bulk = Bulk {
                 segments: 50 + rng.below(1500) as usize,
                 len: [1460, 536, 1448, 100][rng.below(4) as usize],
                 scale,
-                window_field: [65535, 30000, 8192, 512][rng.below(4) as usize],
+                window_field: [65535, 30000, 8192, 4096, 512][rng.below(5) as usize],
                 wire_loss: [0, 10, 30][rng.below(3) as usize],
                 retransmit_after: 0,
                 tap_before_loss: rng.chance(500),
@@ -1863,13 +1865,15 @@ mod test {
                 // a server tap that lags 100 segments keeps a hole the
                 // client's ACK covers about 200 packets before its bytes
                 // arrive, within K4(b)'s tolerance of 256 (a longer lag
-                // gives such a hole up as a gap, by design)
+                // gives such a hole up as a gap, by design); the client's
+                // ACKs trail the bytes, so its tap can lag past k windows
                 lag: [
                     [0, 0],
                     [0, rng.below(100)],
                     [rng.below(60), 0],
                     [0, 60 + rng.below(40)],
-                ][rng.below(4) as usize],
+                    [100 + rng.below(150), 0],
+                ][rng.below(5) as usize],
                 burst: None,
                 lag_from_start: rng.chance(500),
                 client_closes_first: rng.chance(500),
@@ -1886,7 +1890,12 @@ mod test {
                 ..bulk
             };
             let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
-            (window >= (bulk.retransmit_after + 10) * bulk.len as u64 * 2).then_some(bulk)
+            let in_flight = if 0 == bulk.wire_loss {
+                2
+            } else {
+                (bulk.retransmit_after + 10) * 2
+            };
+            (window >= in_flight * bulk.len as u64).then_some(bulk)
         }
     }
 
@@ -1897,8 +1906,9 @@ mod test {
     /// the capture loses segments and lags per tap. An eager reader of the
     /// server's stream must get the captured bytes in order, with a gap of
     /// the right length for each run of segments the capture missed, in one
-    /// connection that finishes.
-    fn bulk_world(bulk: &Bulk, rng: &mut Rng) -> Result<(), String> {
+    /// connection that finishes. Returns true if the reader lost segments
+    /// with a run of missing ones instead, as a known limit of S4 allows.
+    fn bulk_world(bulk: &Bulk, rng: &mut Rng) -> Result<bool, String> {
         let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
         script.window_scales = [bulk.scale; 2];
         script.window_size = bulk.window_field;
@@ -2031,50 +2041,151 @@ mod test {
             read(connection, &mut got, &mut gaps);
             end = connection.end();
         });
-        // the captured bytes in order, a gap for each run of missing ones
-        let (mut expected, mut expected_gaps) = (Vec::new(), Vec::new());
-        let mut missing = 0u64;
-        for (i, &shown) in captured.iter().enumerate() {
-            if shown {
-                if 0 < missing {
-                    expected_gaps.push((expected.len(), Some(missing)));
-                    missing = 0;
-                }
-                expected.extend_from_slice(&data_of(i));
-            } else {
-                missing += bulk.len as u64;
-            }
-        }
-        if 0 < missing {
-            expected_gaps.push((expected.len(), Some(missing)));
-        }
         if 1 != ids.len() {
             return Err(format!("{} connections", ids.len()));
         }
+        // the shown segments in order, a gap for each run of missing ones
+        let expect = |shown: &[bool]| {
+            let (mut expected, mut expected_gaps) = (Vec::new(), Vec::new());
+            let mut missing = 0u64;
+            for (i, &shown) in shown.iter().enumerate() {
+                if shown {
+                    if 0 < missing {
+                        expected_gaps.push((expected.len(), Some(missing)));
+                        missing = 0;
+                    }
+                    expected.extend_from_slice(&data_of(i));
+                } else {
+                    missing += bulk.len as u64;
+                }
+            }
+            if 0 < missing {
+                expected_gaps.push((expected.len(), Some(missing)));
+            }
+            (expected, expected_gaps)
+        };
+        let (expected, expected_gaps) = expect(&captured);
+        if got == expected && gaps == expected_gaps {
+            return match end {
+                Some(TcpConnectionEnd::Finished) => Ok(false),
+                _ => Err(format!("end {end:?}")),
+            };
+        }
+        let mismatch = format!(
+            "got {} bytes (expected {}), gaps {:?} (expected {:?})",
+            got.len(),
+            expected.len(),
+            &gaps[..gaps.len().min(5)],
+            &expected_gaps[..expected_gaps.len().min(5)]
+        );
+        // a known limit (S4): while the client's tap lags past k windows, the
+        // segments the capture shows after a run of missing ones longer than
+        // k windows lie after the window until an ACK moves the stream
+        // forward towards them, and are lost with the run (the lag and two
+        // more at most), a FIN among them too
+        let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
+        let k_windows = 2 * window.min(u64::from(u16::MAX));
+        if bulk.lag[0] * (bulk.len as u64) <= k_windows {
+            return Err(mismatch);
+        }
+        let Some(read) = segments_read(&got, &gaps, bulk.len, &data_of) else {
+            return Err(mismatch);
+        };
+        let mut shown = vec![false; bulk.segments];
+        for i in read {
+            shown[i] = true;
+        }
+        // a client ACK that moves the ACKs forward past a run's start moves
+        // the stream forward too: a segment after the run is lost if the
+        // capture showed it only before the first such ACK after the first
+        // segment after the run
+        let (mut first_shown, mut last_shown) = (vec![None; bulk.segments], vec![0; bulk.segments]);
+        let (mut acks, mut highest_ack) = (Vec::new(), 0);
+        for (index, (_, segment)) in events.iter().enumerate() {
+            if Initiator == segment.sender {
+                if let Some(ack) = segment.ack.filter(|ack| *ack > highest_ack) {
+                    acks.push((index, ack));
+                    highest_ack = ack;
+                }
+            } else if false == segment.payload.is_empty() {
+                let i = segment.offset as usize / bulk.len;
+                first_shown[i] = first_shown[i].or(Some(index));
+                last_shown[i] = index;
+            }
+        }
+        let (mut run_start, mut lost_before) = (None, 0);
+        for i in 0..bulk.segments {
+            let Some(first) = first_shown[i] else {
+                run_start = run_start.or(Some(i));
+                continue;
+            };
+            if let Some(start) = run_start.take() {
+                if (i - start) as u64 * bulk.len as u64 > k_windows {
+                    let start = (start * bulk.len) as u64;
+                    lost_before = acks
+                        .iter()
+                        .find(|(index, ack)| *index > first && *ack > start)
+                        .map_or(usize::MAX, |(index, _)| *index);
+                }
+            }
+            if false == shown[i] && last_shown[i] > lost_before {
+                return Err(mismatch);
+            }
+        }
+        // the ACK of a lost FIN ACKs one more byte
+        let (expected, mut expected_gaps) = expect(&shown);
+        let fin_lost = false == shown[bulk.segments - 1];
+        let one_more = gaps.last().map(|(at, len)| (*at, len.map(|len| len - 1)));
+        if fin_lost && one_more.as_ref() == expected_gaps.last() {
+            expected_gaps.pop();
+            expected_gaps.extend(gaps.last());
+        }
         if got != expected || gaps != expected_gaps {
-            return Err(format!(
-                "got {} bytes (expected {}), gaps {:?} (expected {:?})",
-                got.len(),
-                expected.len(),
-                &gaps[..gaps.len().min(5)],
-                &expected_gaps[..expected_gaps.len().min(5)]
-            ));
+            return Err(mismatch);
         }
-        if Some(TcpConnectionEnd::Finished) != end {
-            return Err(format!("end {end:?}"));
+        match end {
+            Some(TcpConnectionEnd::Finished) => Ok(true),
+            _ if fin_lost => Ok(true),
+            _ => Err(format!("end {end:?}")),
         }
-        Ok(())
+    }
+
+    /// Segments of a bulk transfer with `len` bytes each, by the order in
+    /// which an eager reader got them as the bytes `got`, with the gaps
+    /// `gaps`; `None` unless they are whole segments at their offsets, with
+    /// the bytes of `data_of`.
+    fn segments_read(
+        got: &[u8],
+        gaps: &[(usize, Option<u64>)],
+        len: usize,
+        data_of: impl Fn(usize) -> Vec<u8>,
+    ) -> Option<Vec<usize>> {
+        let mut read = Vec::new();
+        let (mut offset, mut gaps) = (0, gaps.iter().peekable());
+        let mut i = 0;
+        while i < got.len() {
+            while let Some((_, gap)) = gaps.next_if(|(at, _)| *at == i) {
+                offset += usize::try_from((*gap)?).ok()?;
+            }
+            let segment = offset / len;
+            if 0 != offset % len || got.get(i..i + len)? != data_of(segment).as_slice() {
+                return None;
+            }
+            read.push(segment);
+            (i, offset) = (i + len, offset + len);
+        }
+        Some(read)
     }
 
     /// A census of bulk transfers at a volume the histories don't reach:
     /// hundreds of segments, small, large and scaled windows, loss on the
     /// wire with retransmissions (the tap before or after the loss), capture
-    /// loss, also in bursts, and a lag per tap of up to 100 segments (see
-    /// [`bulk_world`]).
+    /// loss, also in bursts, and a lag of up to 100 segments for the
+    /// server's tap and 250 for the client's (see [`bulk_world`]).
     #[test]
     fn bulk_census() {
         let mut failures = Vec::new();
-        let mut worlds = 0;
+        let (mut worlds, mut hits) = (0, 0);
         let seeds = 2 * proptest_cases() as u64;
         for seed in 1..=seeds {
             let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
@@ -2082,8 +2193,9 @@ mod test {
                 continue;
             };
             worlds += 1;
-            if let Err(failure) = bulk_world(&bulk, &mut rng) {
-                failures.push(format!("seed {seed}, {bulk:?}: {failure}"));
+            match bulk_world(&bulk, &mut rng) {
+                Ok(limit) => hits += usize::from(limit),
+                Err(failure) => failures.push(format!("seed {seed}, {bulk:?}: {failure}")),
             }
         }
         assert!(seeds < 4 * worlds, "only {worlds} worlds");
@@ -2092,6 +2204,11 @@ mod test {
             "{} of {worlds} bulk transfers failed:\n{}",
             failures.len(),
             failures.join("\n")
+        );
+        // the known limit of a lagging client tap is rare
+        assert!(
+            worlds < 1000 || hits * 100 <= worlds as usize * 5,
+            "{hits} of {worlds} bulk transfers lost bytes with a burst"
         );
     }
 
