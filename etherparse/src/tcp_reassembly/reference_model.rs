@@ -1137,6 +1137,15 @@ impl ModelStream {
             .rev()
             .find(|(ack_packet, _)| ack_packet + tolerance <= packet)
             .map_or(0, |(_, ack)| *ack);
+        // the ACK's wait counts packets: a hole the ACK covers is overdue
+        // once the bytes from it fill half the buffer (K4(d))
+        let half = config.max_stream_buffer as u64 / 2;
+        if self
+            .first_hole()
+            .is_some_and(|hole| hole.end <= self.ack && self.buffered() >= half)
+        {
+            self.give_up_hole();
+        }
         self.give_up_overdue_hole();
     }
 

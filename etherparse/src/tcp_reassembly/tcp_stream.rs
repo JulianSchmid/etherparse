@@ -1552,6 +1552,15 @@ impl TcpStream {
             // by the ACKs so far (a prepend adds a hole before it)
             self.recent_acks.clear();
         }
+        // the ACK's wait counts packets, not bytes: once the bytes from a
+        // hole the seen ACK covers fill half the stream's buffer, waiting
+        // longer can overflow it (K4(d))
+        if let Some(hole) = self.buffer.hole_at_read_offset() {
+            let half = config.max_stream_buffer as u64 / 2;
+            if hole.end <= self.seen_ack && self.buffer.buffered() as u64 >= half {
+                self.give_up_holes_before(hole.end);
+            }
+        }
         self.give_up_overdue_hole();
     }
 

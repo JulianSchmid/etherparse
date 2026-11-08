@@ -2173,10 +2173,15 @@ mod test {
         // on a host with GRO/TSO), in a capture of one direction and of both
         // (regression test: with the implied ACK waiting
         // `ack_reorder_tolerance` packets, the buffer overflowed, and bytes
-        // the capture showed were rejected as a second gap)
+        // the capture showed were rejected as a second gap); where a known
+        // window keeps the implied ACK further back, a hole the seen ACK
+        // covers is overdue once the bytes from it fill half the buffer
+        // (K4(d); regression test: jumbo frames overflowed a 1 MiB buffer
+        // within `ack_reorder_tolerance` packets)
         for (both, max_stream_buffer, len, segments) in [
             (false, 256 * 1024, 1460, 600),
             (true, 8 * 1024 * 1024, 60_000, 400),
+            (true, 1024 * 1024, 9000, 600),
         ] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer,
