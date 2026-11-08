@@ -306,10 +306,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
         // a pickup's own late SYN arrives among its first segments, never
         // after a FIN of the connection: a SYN in its range after a FIN is a
-        // reconnect's (C4)
+        // reconnect's (C4), unless it lies right where the stream starts (a
+        // SYN-ACK a merged capture shows after the client's request and
+        // FIN)
         let closing = self.initiator_stream.fin_offset().is_some()
             || self.responder_stream.fin_offset().is_some();
-        let own_late_syn_of_pickup = stream.isn().is_none() && closing;
+        let own_late_syn_of_pickup =
+            stream.isn().is_none() && closing && false == stream.syn_at_start(tcp);
         let window = self.window(sender, config);
         if false == self.answers_observed_syn(sender, tcp)
             && (answers_other_syn

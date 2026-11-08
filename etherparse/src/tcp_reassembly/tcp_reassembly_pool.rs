@@ -148,8 +148,8 @@ where
     /// [`TcpProcessed::ended`] (see [`TcpConnectionEnd::Reconnect`]). A
     /// retransmission of the connection's own SYN or SYN-ACK repeats its
     /// ISN and starts none, and a late segment of the replaced connection
-    /// that arrives while its sender sent nothing after its SYN in the
-    /// reconnect is ignored with [`TcpIgnoreReason::AfterEnd`] too, if its
+    /// that arrives while its sender's stream has no start in the reconnect
+    /// yet is ignored with [`TcpIgnoreReason::AfterEnd`] too, if its
     /// sequence numbers show it is the replaced connection's.
     pub fn process_segment(
         &mut self,
@@ -1630,6 +1630,78 @@ mod test {
                 TcpRead::Data(b"new-response"),
                 connection.stream_mut(Responder).read_received()
             );
+        }
+
+        // a merged capture can show the SYN-ACK of a connection whose SYN
+        // it lost after the client's request and FIN: it lies right where
+        // the responder stream starts (the client's ACKs put the server
+        // there), so it is the pickup's own late SYN-ACK, no reconnect (C4)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"GET")
+                .fin(Initiator)
+                .send(Responder, b"resp");
+            let syn_ack = script.segments.remove(1);
+            script.segments.drain(..2);
+            script.segments.insert(2, syn_ack);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(None, processed.ignored);
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(None, connection.end());
+            let responder = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::Observed, responder.status().start);
+            assert_eq!(TcpRead::Data(b"resp"), responder.read_received());
+            let initiator = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"GET"), initiator.read_received());
+            assert!(initiator.is_finished());
+            assert_eq!((0, 1), (pool.stats().tombstones, pool.stats().connections));
+        }
+
+        // a capture merged from two taps can show the last ACK of a close
+        // before the FIN it ACKs: the ACK marks the FIN's number as a
+        // missing byte, which the FIN then takes back, so an eager reader
+        // that waited at that hole gets the end, not a gap
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"req")
+                .send(Responder, b"resp")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let server_fin = script.segments.remove(6);
+            script.segments.push(server_fin);
+            let mut got = Vec::new();
+            for (i, segment) in script.segments.iter().enumerate() {
+                let processed = segment.feed(&mut pool, i as u32);
+                let mut connection = processed.ended;
+                let stream = match (connection.as_mut(), processed.active) {
+                    (Some(ended), _) => ended.stream_mut(Responder),
+                    (None, Some((active, _))) => active.stream_mut(Responder),
+                    _ => continue,
+                };
+                loop {
+                    match stream.read_received() {
+                        TcpRead::Data(data) => {
+                            got.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            panic!("gap of {len:?} after {} bytes at segment {i}", got.len());
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            assert_eq!(b"resp".to_vec(), got);
+            assert_eq!(0, pool.stats().connections);
         }
 
         // the tombstone of a reconnect absorbs late duplicates of the replaced

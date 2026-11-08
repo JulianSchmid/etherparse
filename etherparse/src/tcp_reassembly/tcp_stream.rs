@@ -515,6 +515,14 @@ impl TcpStream {
         self.start_seq
     }
 
+    /// Returns true if the SYN or SYN-ACK `tcp` lies right where the stream
+    /// starts: its ISN + 1 is the stream's first byte, or, without a start,
+    /// the number the other side's kept ACK puts the sender at (K1).
+    pub(crate) fn syn_at_start(&self, tcp: &TcpSlice<'_>) -> bool {
+        let seq = tcp.sequence_number().wrapping_add(1);
+        self.start_seq.or(self.kept_ack.map(|kept| kept.seq)) == Some(seq)
+    }
+
     /// Returns true if the sequence number `seq` lies within what the
     /// stream's sender sent, as far as the stream knows: from the stream's
     /// first byte to the number its sender sends next (an ACK of it comes
@@ -6082,13 +6090,14 @@ mod test {
 
         // other SYNs of a mid-stream pickup change nothing in it, not even
         // with bytes (TCP Fast Open): its own late SYN after the read
-        // position moved counts as out-of-window (C4), while SYNs more than
-        // k windows before the first byte, after the first byte or 2^31 away
-        // from the highest offset (can't be mapped) have a new ISN and start
-        // a reconnect (C2), as does a SYN after the pickup's FIN (C4)
+        // position moved, or for a pickup that starts at its FIN, counts as
+        // out-of-window (C4; right at the first byte it is the pickup's own
+        // also after the FIN), while SYNs more than k windows before the
+        // first byte, after the first byte or 2^31 away from the highest
+        // offset (can't be mapped) have a new ISN and start a reconnect (C2)
         for (factor, fallback_window, lost, consumed, syn_offset, fin, reconnect) in [
             (None, 3, &b""[..], 1, 0, false, false),
-            (None, 3, b"", 0, 0, true, true),
+            (None, 3, b"", 0, 0, true, false),
             (Some(2), 2, b"abcde", 0, 0, false, true),
             (Some(1), 4, b"abcde", 0, 0, false, true),
             (None, 2, b"abcde", 0, 0, false, true),

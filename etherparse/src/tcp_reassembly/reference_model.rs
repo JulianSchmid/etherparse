@@ -1736,7 +1736,14 @@ impl ReferenceModel {
             .streams
             .iter()
             .any(|stream| stream.fin_offset.is_some());
-        let late_syn_of_closing_pickup = false == self.streams[sender].observed && closing;
+        let stream = &self.streams[sender];
+        // unless the half lies right where the stream starts
+        let at_start = stream.base == Some(segment.offset)
+            || (stream.base.is_none()
+                && stream
+                    .kept_ack
+                    .is_some_and(|(ack, _)| ack == segment.offset));
+        let late_syn_of_closing_pickup = false == stream.observed && closing && false == at_start;
         self.answers_observed_syn(segment)
             || (false == answers_other_syn
                 && false == late_syn_of_closing_pickup
