@@ -1186,6 +1186,10 @@ mod test {
     ///   connection to tell them by, so the ACK of a server that still held
     ///   the old connection answers the new SYN (S5) and the client's RST
     ///   to it resets the new connection (F4).
+    /// - `C1 two back`: a late segment of a connection two reconnects back or
+    ///   more arrives after the next connection's first segment: the pool
+    ///   keeps the numbers of only the connection a connection replaced, so
+    ///   it goes through the new connection's rules (C1).
     /// - `C1 unseen stream`: the same for a stream of a connection that the
     ///   pool saw (the capture shows no SYN, byte or FIN of its sender and no
     ///   ACK of it by its peer before the next connection's first segment):
@@ -1270,13 +1274,32 @@ mod test {
             if false == previous_visible && previous_late {
                 return Some("C1 unseen connection");
             }
+            // a late segment of a connection two reconnects back or more,
+            // whose numbers the pool keeps no longer (C1)
+            let two_back = first_of_k.is_some_and(|at| {
+                captured[at..]
+                    .iter()
+                    .any(|s| s.incarnation as usize + 2 <= k)
+            });
+            if two_back {
+                return Some("C1 two back");
+            }
+            // the segment that created the connection before in the pool: an
+            // RST, a FIN or a pure ACK for an unknown key creates nothing
+            // (A6), so the pool never saw the ones before it
+            let created_at = captured.iter().position(|s| {
+                s.incarnation as usize == k - 1
+                    && false == s.header.rst
+                    && (s.header.syn || (s.header.ack && false == s.payload.is_empty()))
+            });
             // a stream of the connection before that the pool never saw (no
             // SYN, bytes or FIN of its sender, no ACK of it by its peer) has
             // no numbers to tell its late segments by
             let unseen_stream = first_of_k.is_some_and(|at| {
                 [Initiator, Responder].into_iter().any(|role| {
                     let of_previous = |s: &&TestSegment| s.incarnation as usize == k - 1;
-                    let seen = captured[..at].iter().filter(of_previous).any(|s| {
+                    let created = created_at.unwrap_or(at).min(at);
+                    let seen = captured[created..at].iter().filter(of_previous).any(|s| {
                         if s.sender == role {
                             s.header.syn || s.header.fin || false == s.payload.is_empty()
                         } else {
@@ -1297,14 +1320,8 @@ mod test {
                 .iter()
                 .position(|s| s.incarnation as usize == k && s.header.syn);
             // the connection before is open until the capture shows its RST
-            // after a segment that created it (an RST for an unknown key
-            // creates nothing, A6; one that closed with FINs counts as open,
+            // after its creation (one that closed with FINs counts as open,
             // which only widens the exclusion)
-            let created_at = captured.iter().position(|s| {
-                s.incarnation as usize == k - 1
-                    && false == s.header.rst
-                    && (s.header.syn || (s.header.ack && false == s.payload.is_empty()))
-            });
             let previous_end = captured
                 .iter()
                 .enumerate()
@@ -1437,8 +1454,11 @@ mod test {
                     (false == fin_seen || start == half_next)
                         && u64::from(start.wrapping_sub(half_next)) <= range
                 }
-                // the peer's last ACK is what the pool kept for the stream
+                // the peer's last ACK is what the pool kept for the stream,
+                // apart from a late SYN-ACK that a read pickup refused with
+                // its ACK number (A5, C4; one it took gave an observed start)
                 None => of_role(role.other())
+                    .filter(|s| false == s.header.syn)
                     .filter_map(|s| s.ack)
                     .next_back()
                     .is_none_or(|ack| {
