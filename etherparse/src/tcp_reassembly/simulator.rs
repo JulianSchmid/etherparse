@@ -1926,6 +1926,12 @@ mod test {
         lag_from_start: bool,
         /// Whether the client closes first.
         client_closes_first: bool,
+        /// From which server segment on the client's ACKs advertise a
+        /// larger window field, if any: its tap's lag shows that late.
+        growth: Option<(usize, u16)>,
+        /// Server segment that the network delays by a number of positions
+        /// behind the later ones, if any.
+        reorder: Option<(usize, u64)>,
     }
 
     impl Bulk {
@@ -1958,6 +1964,8 @@ mod test {
                 burst: None,
                 lag_from_start: rng.chance(500),
                 client_closes_first: rng.chance(500),
+                growth: None,
+                reorder: None,
             };
             let burst = rng.chance(250).then(|| {
                 (
@@ -1965,9 +1973,30 @@ mod test {
                     50 + rng.below(100) as usize,
                 )
             });
+            let growth = rng.chance(250).then(|| {
+                let at = rng.below(bulk.segments as u64) as usize;
+                (
+                    at,
+                    bulk.window_field.saturating_mul(1 << (1 + rng.below(4))),
+                )
+            });
+            // a segment delayed past the close is lost after the end (F3's
+            // known limit), so the delayed one lies before the last 31, and
+            // its delay adds to the server tap's lag, which stays within 100
+            // segments (see above)
+            let reorder = rng.chance(250).then(|| {
+                let before_close = bulk.segments.saturating_sub(31).max(1);
+                let segment = rng.below(before_close as u64) as usize;
+                (
+                    segment,
+                    (1 + rng.below(30)).min(100u64.saturating_sub(bulk.lag[1])),
+                )
+            });
             let bulk = Bulk {
                 retransmit_after: 3 + rng.below(20),
                 burst,
+                growth,
+                reorder,
                 ..bulk
             };
             let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
@@ -2046,7 +2075,11 @@ mod test {
                 && false == rng.chance(bulk.capture_loss)
             {
                 captured[i] = true;
-                events.push((at + bulk.lag[1], segment));
+                let delay = bulk
+                    .reorder
+                    .filter(|(segment, _)| *segment == i && false == retransmission)
+                    .map_or(0, |(_, delay)| delay);
+                events.push((at + bulk.lag[1] + delay, segment));
             }
             if lost {
                 continue;
@@ -2059,6 +2092,9 @@ mod test {
             if since_ack >= 2 || false == received.get(acked).copied().unwrap_or(true) {
                 since_ack = 0;
                 let mut acking = script.clone();
+                if let Some((_, field)) = bulk.growth.filter(|(from, _)| *from <= i) {
+                    acking.window_size = field;
+                }
                 acking.ack_to(Initiator, (acked * bulk.len) as u64);
                 let ack = acking.segments.pop().unwrap();
                 if false == rng.chance(bulk.capture_loss) {
@@ -2323,6 +2359,8 @@ mod test {
             burst: None,
             lag_from_start: false,
             client_closes_first: false,
+            growth: None,
+            reorder: None,
         };
         for seed in 1..=20u64 {
             let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
