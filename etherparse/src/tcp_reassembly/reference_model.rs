@@ -371,11 +371,11 @@ impl ModelStream {
                 }
             } else if start < base as i64 && false == payload.is_empty() {
                 // only the filler byte of a keep-alive before an observed
-                // start doesn't count
+                // start doesn't count, nor the Fast Open bytes of the own
+                // SYN (A2)
                 out_of_window = false
-                    == (start == base as i64 - 1
-                        && 1 == payload.len()
-                        && false == (header.syn || header.fin));
+                    == (header.syn
+                        || (start == base as i64 - 1 && 1 == payload.len() && false == header.fin));
             }
         }
         let end = start + payload.len() as i64;
@@ -709,10 +709,12 @@ impl ModelStream {
 
     /// Returns true if the stream has an observed start that has the ISN of
     /// the SYN or SYN-ACK `segment` of the same script: the start is the
-    /// first byte of that SYN (and not, e.g., the ACK of a SYN-ACK after the
-    /// bytes of the SYN). Resyncs don't change it.
+    /// first byte of that SYN, or lies within its TCP Fast Open bytes (the
+    /// ACK of a SYN-ACK that ACKed them, A2). Resyncs don't change it.
     fn has_isn_of(&self, segment: &TestSegment) -> bool {
-        self.observed && Some(segment.offset) == self.base
+        // the start can lie after the SYN's Fast Open bytes (A2)
+        let bytes = segment.offset..=segment.offset + segment.payload.len() as u64;
+        self.observed && self.base.is_some_and(|base| bytes.contains(&base))
     }
 
     /// Returns true if the stream has an observed start at the byte with

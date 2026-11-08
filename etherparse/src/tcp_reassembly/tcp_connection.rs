@@ -792,10 +792,7 @@ impl<Timestamp> Tombstone<Timestamp> {
         } else {
             [1, 0]
         };
-        if let Some(syn) = self.syns[own]
-            .as_mut()
-            .filter(|syn| syn.isn == tcp.sequence_number())
-        {
+        if let Some(syn) = self.syns[own].as_mut().filter(|syn| syn.is_syn(tcp)) {
             syn.len = syn.len.max(tcp.payload().len() as u32);
             return true;
         }

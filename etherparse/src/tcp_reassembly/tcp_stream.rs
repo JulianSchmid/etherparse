@@ -452,8 +452,10 @@ impl TcpStream {
     /// be the stream's own, where `window` is the receiver's receive window.
     /// Otherwise it belongs to a reconnect (C2).
     ///
-    /// It has to have the ISN of the stream's observed start. Without one,
-    /// it has to lie at or before the stream's first byte, at most
+    /// It has to have the ISN of the stream's observed start, or its bytes
+    /// have to end there (the start came from the ACK number of a SYN-ACK
+    /// that ACKed the SYN's TCP Fast Open bytes, A2). Without an observed
+    /// start, it has to lie at or before the stream's first byte, at most
     /// as far before it as earlier bytes could be put in front of it (the
     /// A5 range, C4), whether the stream can still take it or not (see
     /// [`TcpStream::can_take_syn`]). Without a start, the same holds for
@@ -468,7 +470,7 @@ impl TcpStream {
         let seq = isn.wrapping_add(1);
         let range = window_range(window, config);
         match (self.isn(), self.start_seq) {
-            (Some(own), _) => own == isn,
+            (Some(_), _) => self.syn.is_some_and(|syn| syn.is_syn(tcp)),
             (None, Some(start_seq)) => self
                 .offset(start_seq, seq)
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
@@ -1041,8 +1043,10 @@ impl TcpStream {
             return (start, false);
         }
         if TcpStreamStart::Observed == self.status.start {
+            // the TCP Fast Open bytes of the stream's own SYN lie before a
+            // start that the SYN-ACK's ACK number gave (A2)
             let keep_alive_filler = -1 == start && is_keep_alive_shaped(tcp);
-            return (start, false == keep_alive_filler);
+            return (start, false == (keep_alive_filler || tcp.syn()));
         }
         if false == self.can_move_start_back(start, window, config) {
             (start, true)
@@ -1540,6 +1544,13 @@ impl ObservedSyn {
     /// accepts).
     pub fn is_acked_by(&self, ack: u32) -> bool {
         ack.wrapping_sub(self.isn.wrapping_add(1)) <= self.len
+    }
+
+    /// Returns true if the SYN or SYN-ACK `tcp` is the observed one: it has
+    /// its ISN, or its TCP Fast Open bytes end at the observed start (the
+    /// start came from the ACK number of a SYN-ACK that ACKed them, A2).
+    pub fn is_syn(&self, tcp: &TcpSlice<'_>) -> bool {
+        (self.isn.wrapping_sub(tcp.sequence_number()) as usize) <= tcp.payload().len()
     }
 }
 
