@@ -1736,15 +1736,31 @@ mod test {
         )
     }
 
+    /// Number of proptest cases the run asks for (`PROPTEST_CASES`, 256
+    /// without it), which sizes the censuses: a run under emulation asks for
+    /// few.
+    fn proptest_cases() -> usize {
+        std::env::var("PROPTEST_CASES")
+            .ok()
+            .and_then(|cases| cases.parse().ok())
+            .unwrap_or(256)
+    }
+
     /// A census of a deterministic sample of histories: none fails, and few
     /// hit a known limit (rare coincidences), so the oracle judges almost
-    /// all. Unlike the proptest, it doesn't stop at the first failure.
+    /// all. Unlike the proptest, it doesn't stop at the first failure. The
+    /// share of limits is checked on the full sample of 2000 histories, which
+    /// a run with fewer than 256 proptest cases shrinks.
     #[test]
     fn history_census() {
         use proptest::strategy::ValueTree;
         let mut runner = proptest::test_runner::TestRunner::deterministic();
         let strategy = history_any();
-        let cases = 2000;
+        let cases = if proptest_cases() < 256 {
+            8 * proptest_cases()
+        } else {
+            2000
+        };
         let mut hits = std::collections::BTreeMap::new();
         let mut failures = Vec::new();
         for case in 0..cases {
@@ -1768,9 +1784,331 @@ mod test {
             failures.join("\n")
         );
         assert!(
-            total * 100 <= cases * 5,
+            cases < 2000 || total * 100 <= cases * 5,
             "{total} of {cases} histories hit a known limit: {hits:?}"
         );
+    }
+
+    /// A small xorshift generator for the bulk census, whose worlds are
+    /// built step by step rather than by proptest strategies.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n.max(1)
+        }
+
+        /// Returns true with a chance of `per_mille` in 1000.
+        fn chance(&mut self, per_mille: u64) -> bool {
+            self.below(1000) < per_mille
+        }
+    }
+
+    /// A bulk transfer from the server to the client (see [`bulk_world`]).
+    #[derive(Clone, Debug)]
+    struct Bulk {
+        /// Number of server segments.
+        segments: usize,
+        /// Bytes per server segment.
+        len: usize,
+        /// Window scale of both sides, if any.
+        scale: Option<u8>,
+        /// Window field of every segment.
+        window_field: u16,
+        /// Chance in 1000 that a server segment is lost on the wire; it is
+        /// retransmitted `retransmit_after` positions later.
+        wire_loss: u64,
+        /// Positions after which a segment lost on the wire is retransmitted.
+        retransmit_after: u64,
+        /// Whether the tap sits before the point of the wire loss, so it sees
+        /// the segments lost there.
+        tap_before_loss: bool,
+        /// Chance in 1000 that the capture loses a segment.
+        capture_loss: u64,
+        /// Positions each tap lags behind, indexed by role (within K4(b)'s
+        /// tolerance, counting the ACKs in between).
+        lag: [u64; 2],
+        /// Server segments the capture misses in a row (a burst), from the
+        /// first one on, if any.
+        burst: Option<(usize, usize)>,
+        /// Whether the server's tap lags from the start, its SYN-ACK
+        /// included; otherwise the lag starts after the handshake.
+        lag_from_start: bool,
+        /// Whether the client closes first.
+        client_closes_first: bool,
+    }
+
+    impl Bulk {
+        /// A random bulk transfer, or `None` if its sender would keep more
+        /// than a window in flight (it waits for the retransmission).
+        fn any(rng: &mut Rng) -> Option<Bulk> {
+            let scale = [None, Some(2), Some(7)][rng.below(3) as usize];
+            let bulk = Bulk {
+                segments: 50 + rng.below(1500) as usize,
+                len: [1460, 536, 1448, 100][rng.below(4) as usize],
+                scale,
+                window_field: [65535, 30000, 8192, 512][rng.below(4) as usize],
+                wire_loss: [0, 10, 30][rng.below(3) as usize],
+                retransmit_after: 0,
+                tap_before_loss: rng.chance(500),
+                capture_loss: [0, 5, 20, 50][rng.below(4) as usize],
+                // a server tap that lags 100 segments keeps a hole the
+                // client's ACK covers about 200 packets before its bytes
+                // arrive, within K4(b)'s tolerance of 256 (a longer lag
+                // gives such a hole up as a gap, by design)
+                lag: [
+                    [0, 0],
+                    [0, rng.below(100)],
+                    [rng.below(60), 0],
+                    [0, 60 + rng.below(40)],
+                ][rng.below(4) as usize],
+                burst: None,
+                lag_from_start: rng.chance(500),
+                client_closes_first: rng.chance(500),
+            };
+            let burst = rng.chance(250).then(|| {
+                (
+                    rng.below(bulk.segments as u64) as usize,
+                    50 + rng.below(100) as usize,
+                )
+            });
+            let bulk = Bulk {
+                retransmit_after: 3 + rng.below(20),
+                burst,
+                ..bulk
+            };
+            let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
+            (window >= (bulk.retransmit_after + 10) * bulk.len as u64 * 2).then_some(bulk)
+        }
+    }
+
+    /// Runs the bulk transfer `bulk` from the server to the client with the
+    /// ISNs, losses and capture decisions of `rng`: the client ACKs every
+    /// second segment it received in order (and each one out of order, as a
+    /// duplicate ACK), the server retransmits a segment the wire lost, and
+    /// the capture loses segments and lags per tap. An eager reader of the
+    /// server's stream must get the captured bytes in order, with a gap of
+    /// the right length for each run of segments the capture missed, in one
+    /// connection that finishes.
+    fn bulk_world(bulk: &Bulk, rng: &mut Rng) -> Result<(), String> {
+        let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
+        script.window_scales = [bulk.scale; 2];
+        script.window_size = bulk.window_field;
+        // what the capture shows, by the time it shows it
+        let mut events: Vec<(u64, TestSegment)> = Vec::new();
+        script.syn();
+        events.push((0, script.segments[0].clone()));
+        script.syn_ack();
+        let syn_ack_lag = if bulk.lag_from_start { bulk.lag[1] } else { 0 };
+        events.push((1 + syn_ack_lag, script.segments[1].clone()));
+        script.ack(Initiator).send(Initiator, b"GET /");
+        events.push((2, script.segments[2].clone()));
+        events.push((2, script.segments[3].clone()));
+        let start = 3;
+        // the server's transmissions: when, which segment, a retransmission
+        let mut sends: Vec<(u64, usize, bool)> = Vec::new();
+        let mut lost_on_wire = Vec::new();
+        for i in 0..bulk.segments {
+            let lost = rng.chance(bulk.wire_loss);
+            lost_on_wire.push(lost);
+            sends.push((start + i as u64, i, false));
+            if lost {
+                sends.push((start + i as u64 + bulk.retransmit_after, i, true));
+            }
+        }
+        sends.sort();
+        let data_of =
+            |i: usize| -> Vec<u8> { (0..bulk.len).map(|j| ((i * 7 + j) % 251) as u8).collect() };
+        let mut received = vec![false; bulk.segments];
+        let mut captured = vec![false; bulk.segments];
+        let (mut acked, mut since_ack) = (0, 0);
+        for &(at, i, retransmission) in &sends {
+            let mut sending = script.clone();
+            sending.send_at(Responder, (i * bulk.len) as u64, &data_of(i));
+            let segment = sending.segments.pop().unwrap();
+            let lost = lost_on_wire[i] && false == retransmission;
+            let in_burst = bulk
+                .burst
+                .is_some_and(|(first, len)| (first..first + len).contains(&i));
+            if (false == lost || bulk.tap_before_loss)
+                && false == in_burst
+                && false == rng.chance(bulk.capture_loss)
+            {
+                captured[i] = true;
+                events.push((at + bulk.lag[1], segment));
+            }
+            if lost {
+                continue;
+            }
+            received[i] = true;
+            while acked < bulk.segments && received[acked] {
+                acked += 1;
+            }
+            since_ack += 1;
+            if since_ack >= 2 || false == received.get(acked).copied().unwrap_or(true) {
+                since_ack = 0;
+                let mut acking = script.clone();
+                acking.ack_to(Initiator, (acked * bulk.len) as u64);
+                let ack = acking.segments.pop().unwrap();
+                if false == rng.chance(bulk.capture_loss) {
+                    events.push((at + bulk.lag[0], ack));
+                }
+            }
+        }
+        // the close, after all bytes
+        for i in 0..bulk.segments {
+            script.send_at(Responder, (i * bulk.len) as u64, &data_of(i));
+        }
+        script.segments.clear();
+        let end_at = start + bulk.segments as u64 + bulk.retransmit_after + 2;
+        let roles = if bulk.client_closes_first {
+            [Initiator, Responder]
+        } else {
+            [Responder, Initiator]
+        };
+        script.fin(roles[0]).fin(roles[1]).ack(roles[0]);
+        for (k, segment) in script.segments.iter().enumerate() {
+            let lag = bulk.lag[role_index(segment.sender)];
+            events.push((end_at + k as u64 + lag, segment.clone()));
+        }
+        events.sort_by_key(|(at, _)| *at);
+
+        let mut pool = TcpReassemblyPool::<u32, ()>::new(config());
+        let (mut got, mut gaps) = (Vec::new(), Vec::new());
+        let mut end = None;
+        let mut ids = std::collections::BTreeSet::new();
+        let read = |connection: &mut TcpConnection<u32>,
+                    got: &mut Vec<u8>,
+                    gaps: &mut Vec<(usize, Option<u64>)>| {
+            let stream = connection.stream_mut(Responder);
+            loop {
+                match stream.read_received() {
+                    TcpRead::Data(data) => {
+                        got.extend_from_slice(data);
+                        let len = data.len();
+                        stream.consume(len);
+                    }
+                    TcpRead::Gap { len } => {
+                        gaps.push((got.len(), len));
+                        stream.consume_gap();
+                    }
+                    _ => break,
+                }
+            }
+        };
+        for (_, segment) in &events {
+            let processed = segment.feed(&mut pool, 1);
+            if let Some(mut connection) = processed.ended {
+                ids.insert(connection.id().0);
+                read(&mut connection, &mut got, &mut gaps);
+                end = connection.end();
+            } else if let Some((connection, _)) = processed.active {
+                ids.insert(connection.id().0);
+                read(connection, &mut got, &mut gaps);
+            }
+        }
+        pool.evict_all(|connection| {
+            read(connection, &mut got, &mut gaps);
+            end = connection.end();
+        });
+        // the captured bytes in order, a gap for each run of missing ones
+        let (mut expected, mut expected_gaps) = (Vec::new(), Vec::new());
+        let mut missing = 0u64;
+        for (i, &shown) in captured.iter().enumerate() {
+            if shown {
+                if 0 < missing {
+                    expected_gaps.push((expected.len(), Some(missing)));
+                    missing = 0;
+                }
+                expected.extend_from_slice(&data_of(i));
+            } else {
+                missing += bulk.len as u64;
+            }
+        }
+        if 0 < missing {
+            expected_gaps.push((expected.len(), Some(missing)));
+        }
+        if 1 != ids.len() {
+            return Err(format!("{} connections", ids.len()));
+        }
+        if got != expected || gaps != expected_gaps {
+            return Err(format!(
+                "got {} bytes (expected {}), gaps {:?} (expected {:?})",
+                got.len(),
+                expected.len(),
+                &gaps[..gaps.len().min(5)],
+                &expected_gaps[..expected_gaps.len().min(5)]
+            ));
+        }
+        if Some(TcpConnectionEnd::Finished) != end {
+            return Err(format!("end {end:?}"));
+        }
+        Ok(())
+    }
+
+    /// A census of bulk transfers at a volume the histories don't reach:
+    /// hundreds of segments, small, large and scaled windows, loss on the
+    /// wire with retransmissions (the tap before or after the loss), capture
+    /// loss, also in bursts, and a lag per tap of up to 100 segments (see
+    /// [`bulk_world`]).
+    #[test]
+    fn bulk_census() {
+        let mut failures = Vec::new();
+        let mut worlds = 0;
+        let seeds = 2 * proptest_cases() as u64;
+        for seed in 1..=seeds {
+            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let Some(bulk) = Bulk::any(&mut rng) else {
+                continue;
+            };
+            worlds += 1;
+            if let Err(failure) = bulk_world(&bulk, &mut rng) {
+                failures.push(format!("seed {seed}, {bulk:?}: {failure}"));
+            }
+        }
+        assert!(seeds < 4 * worlds, "only {worlds} worlds");
+        assert!(
+            failures.is_empty(),
+            "{} of {worlds} bulk transfers failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
+
+    /// Bulk transfers whose server tap lags further behind than k windows of
+    /// an unscaled window, with retransmissions: the client's ACKs lead the
+    /// bytes by more than the implied ACK's distance, so only what the
+    /// capture showed of the server may imply ACKs (K2), and the holes of
+    /// the late retransmissions stay fillable (K4(b)).
+    #[test]
+    fn bulk_lag_beyond_windows() {
+        let bulk = Bulk {
+            segments: 400,
+            len: 1448,
+            scale: None,
+            window_field: 65535,
+            wire_loss: 30,
+            retransmit_after: 6,
+            tap_before_loss: false,
+            capture_loss: 0,
+            lag: [0, 95],
+            burst: None,
+            lag_from_start: false,
+            client_closes_first: false,
+        };
+        for seed in 1..=20u64 {
+            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            if let Err(failure) = bulk_world(&bulk, &mut rng) {
+                panic!("seed {seed}: {failure}");
+            }
+        }
     }
 
     proptest! {
