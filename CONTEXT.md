@@ -69,7 +69,7 @@ Missing bytes of a stream before the furthest byte received or ACKed; a retransm
 _Avoid_: gap (while the bytes may still arrive), missing segment
 
 **Overdue hole**:
-A hole whose bytes the receiver must already have, by the implied ACK or by an ACK seen long enough ago; late segments still fill it, but it becomes a gap once the reader reaches it.
+A hole the reassembler stops waiting for: one whose bytes the receiver must already have, by the implied ACK or a seen ACK some packets ago, one before bytes the limits rejected, and the hole at the read position once waiting longer could overflow the stream's buffer; late segments still fill it, but it becomes a gap once the reader reaches it.
 _Avoid_: stale hole, expired hole
 
 **Gap**:
