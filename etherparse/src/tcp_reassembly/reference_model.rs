@@ -1335,6 +1335,17 @@ impl ReferenceModel {
         } else {
             self.apply_own_segment(segment, &mut available);
         }
+        // a SYN kept as possibly blind whose stream has a start is kept no
+        // longer: a late SYN (A5), or dropped
+        let started = self.reconnect_syn.as_ref().is_some_and(|syn| {
+            self.reconnect_syn_maybe_blind
+                && self.streams[role_index(self.sender_role(syn))]
+                    .base
+                    .is_some()
+        });
+        if let Some(syn) = self.reconnect_syn.take_if(|_| started) {
+            self.apply_kept_syn(syn, &mut available);
+        }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self.known_window(role);
             self.streams[role_index(role)].after_packet(window, self.packets, &self.config);
@@ -1398,6 +1409,11 @@ impl ReferenceModel {
         let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
         let syn_role = self.sender_role(&syn);
         let syn_sender = role_index(syn_role);
+        // a stream that started at another SYN can't take the kept one
+        if self.streams[syn_sender].observed && false == self.streams[syn_sender].has_isn_of(&syn) {
+            self.streams[syn_sender].out_of_window_segments += 1;
+            return;
+        }
         if self.streams[syn_sender].base.is_none() && false == self.is_own_syn(&syn) {
             self.streams[syn_sender].kept_ack = None;
         }
@@ -1484,16 +1500,6 @@ impl ReferenceModel {
         // the sender moved past its SYN (S5)
         if plausible && false == header.syn {
             self.streams[sender].syn_unacked = false;
-        }
-        // a SYN kept as possibly blind whose stream starts from bytes is a
-        // late SYN of that stream (A5), or dropped
-        if false == had_base && self.streams[sender].base.is_some() {
-            let own = self.reconnect_syn.as_ref().is_some_and(|syn| {
-                self.reconnect_syn_maybe_blind && self.sender_role(syn) == sender_role
-            });
-            if let Some(syn) = self.reconnect_syn.take_if(|_| own) {
-                self.apply_kept_syn(syn, available);
-            }
         }
         // a SYN after a resync gives no window (A3), also after one that
         // kept the mapping
