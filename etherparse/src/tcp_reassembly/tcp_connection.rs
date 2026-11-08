@@ -599,7 +599,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        Verdict::ConfirmsReconnect == self.verdict(self.role(source), tcp, config)
+        // only a SYN-ACK can, so the verdict is left to `add_segment` for
+        // every other segment
+        (tcp.syn() && tcp.ack())
+            && Verdict::ConfirmsReconnect == self.verdict(self.role(source), tcp, config)
     }
 
     /// Takes the kept SYN of a reconnect, if there is one.
