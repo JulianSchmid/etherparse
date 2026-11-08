@@ -125,6 +125,14 @@ The bulk census now holds the client's handshake ACK and request back by the cli
 
 Coverage: the bulk census lags the client's tap by up to 250 positions and admits small windows without wire loss. A world whose client tap lags past k windows may lose the segments that finding 1's known limit names. The census works them out from the capture order and checks that nothing else is lost: 89 of 7107 worlds at 5000 cases; the mutant without leading data fails 63. Runs on fresh seeds found two more things:
 - A late segment of an old stream the capture never showed (its SYN-ACK, ACK and bytes lost) has no span, so C1 can't absorb it: the new known limit "C1 unseen stream".
-- A rare mismatch of the model in `reconnects` at 20,000 cases, which fails at `2460276` too; open, seeds saved. A late retransmission of a pickup's old SYN starts a reconnect (C4), and the model then reads the old responder's bytes that S5 drops in the pool.
+- A rare mismatch of the model in `reconnects` at 20,000 cases, which failed at `2460276` too. A late retransmission of a pickup's old SYN started a reconnect (C4), where the new connection's SYN from the other side was kept (S5). The pool dropped that SYN as too far before the bytes that then started its stream, but the model applied it with the offsets of the other script. The model now drops it too; both seeds are kept.
+
+A release sweep of 200 fresh seeds × 3000 random histories found one more: a reuse after TIME-WAIT, then a near reuse below its end, landed exactly on the ISN of the connection two back, which the tombstone still remembers. The generator now avoids every earlier ISN, not only the previous one, as stacks' clocks never repeat one; the seed is kept. The sweep is the gate from now on, with failure persistence off so that each seed runs on its own: 200 seeds × 3000 histories, the model on 32 seeds × 3000, and the censuses at 10,000 and 3000 cases, in release.
+
+The next two sweeps found five more histories that the simulator judged wrong; in each, the pool did what a documented limit says, and the oracle's detectors missed it:
+- The detectors of "segments before the handshake" and "unseen stream" counted segments that the capture showed before the connection before existed. An RST, a FIN or a pure ACK for an unknown key creates nothing (A6), so the pool never saw them.
+- The detector of "C4 pickup" took a late SYN-ACK's ACK number for the one the pool kept, but a read pickup refuses that SYN-ACK with its ACK number.
+- Late segments of a connection two reconnects back went through the new connection's rules, as C1 keeps only one connection's numbers. That is now the named limit "C1 two back".
+All five seeds are kept.
 
 Understandability: S5, C1, C2 and C4 are rules and tables now, with their reasons in ADR-0003. K1 is shorter, and a table lists what a stream remembers of the ACKs and of the bytes ahead.
