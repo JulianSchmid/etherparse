@@ -62,3 +62,5 @@ The code now cites RFC 9293 3.10.7.4 for the RST check, and the spec cites RFC 9
   - `stats()` and `TcpPoolStats`;
   - buffer recycling with `max_pooled_buffers` / `max_pooled_buffer_capacity`.
 - The pcap example should flush with `evict_all` at the end of the capture. Its callbacks come in id order, so the output is the same in every run. It can also evict by capture time with `evict_older_than` and recycle the connections it gets in `ended`.
+
+**2026-11-08 — council review:** the carry-overs above that mention a SYN kept for a reconnect are void (ticket 10, 2026-11-08 note): reconnects start right away at a SYN or SYN-ACK with a new ISN, late duplicates of the replaced handshake are ignored with `AfterEnd`, and `max_total_buffered` doesn't count the one SYN a connection keeps during a simultaneous open (S5). The known limits to document are the ones in spec C2 and C4.

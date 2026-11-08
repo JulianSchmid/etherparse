@@ -94,3 +94,5 @@ Known limits (documentation for ticket 16):
 - A reconnect SYN whose ISN lies by chance within k windows before a pickup's first byte, or before the kept ACK of a stream without a start, is taken as the stream's late SYN (probability about k × window / 2^32, 0.2 % with the defaults).
 - Late segments of a replaced connection count as out-of-window in the reconnect (decision 11).
 - A kept SYN that no SYN-ACK confirms stays until the connection ends; it has no timeout.
+
+**2026-11-08 — council review:** the kept SYN of a reconnect (decisions 3, 5–11, the known limits above about kept SYNs) is gone: a SYN or SYN-ACK with a new ISN from an endpoint of an open connection starts the reconnect right away, in either capture order, and the connection that replaced another absorbs late duplicates of the replaced handshake like a tombstone (spec C1, C2 with the decision history). The only kept SYN left is the simultaneous open's (S5).
