@@ -1587,9 +1587,9 @@ impl ReferenceModel {
             // the sender's own SYN-ACK confirms nothing
             return false == (self.is_own_syn(segment) || self.answers_observed_syn(segment));
         }
-        // a SYN kept as possibly blind confirms a reconnect only by being
-        // ACKed
-        if self.reconnect_syn_maybe_blind {
+        // a SYN kept as possibly blind and a kept SYN-ACK confirm a reconnect
+        // only by being ACKed
+        if self.reconnect_syn_maybe_blind || syn.header.ack {
             return false;
         }
         // a SYN-ACK the receiver drops confirms nothing (S5)

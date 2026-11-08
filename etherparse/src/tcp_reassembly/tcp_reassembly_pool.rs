@@ -1295,6 +1295,29 @@ mod test {
             assert_eq!(3, connection.stream(Initiator).acked_offset());
         }
 
+        // ... a kept SYN-ACK is confirmed only by the SYN it answers or a
+        // SYN-ACK that ACKs it, not by a SYN-ACK of the other endpoint with
+        // a new ISN (C2)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2000, 6000);
+            script.syn().syn_ack();
+            script.segments[1].feed(&mut pool, 7);
+            let mut backward =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 9000, 7776);
+            backward.syn_ack();
+            // (the script clears the ACK flag of its first SYN)
+            let mut foreign = backward.segments[0].clone();
+            foreign.header.ack = true;
+            foreign.header.acknowledgment_number = 9001;
+            let processed = foreign.feed(&mut pool, 8);
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(0), processed.active.unwrap().0.id());
+        }
+
         // ... and a retransmission of the kept SYN-ACK keeps the first one's
         // timestamp, which is the reconnect's `first_seen`
         {

@@ -367,8 +367,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             // a mid-stream pickup) confirms nothing
             Some(syn) if syn.is_acked_by(self.endpoint(sender), tcp) => false == own,
             // a SYN kept as possibly blind confirms a reconnect only by being
-            // ACKed, as a blind SYN-ACK could have any ISN
-            Some(syn) => false == (syn.maybe_blind || stream.awaits_syn_ack() || own),
+            // ACKed, as a blind SYN-ACK could have any ISN, and so does a
+            // kept SYN-ACK
+            Some(syn) => {
+                syn.ack.is_none() && false == (syn.maybe_blind || stream.awaits_syn_ack() || own)
+            }
         };
         if confirms {
             Verdict::ConfirmsReconnect
