@@ -22,6 +22,11 @@ pub struct TcpReassemblyConfig {
     /// consuming bytes makes room. A stream's buffer can take up to about
     /// four times as much memory (see
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`]).
+    ///
+    /// Size it above the bytes a connection can have in flight (bandwidth
+    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB), or a lost
+    /// segment whose retransmission arrives after a full window of bytes
+    /// becomes a gap although the retransmission was captured.
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes before the furthest stored byte of a stream
@@ -66,6 +71,9 @@ pub struct TcpReassemblyConfig {
     /// captured. It also decides how far from the receiver's ACK the first
     /// segment of a mid-stream pickup may lie (see
     /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
+    /// For captures that start mid-stream, size it like
+    /// [`TcpReassemblyConfig::max_stream_buffer`]: above the bytes a
+    /// connection can have in flight.
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an
