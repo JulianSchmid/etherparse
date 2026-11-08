@@ -1297,19 +1297,32 @@ mod test {
                 .iter()
                 .position(|s| s.incarnation as usize == k && s.header.syn);
             // the connection before is open until the capture shows its RST
-            // (one that closed with FINs counts as open, which only widens
-            // the exclusion)
+            // after a segment that created it (an RST for an unknown key
+            // creates nothing, A6; one that closed with FINs counts as open,
+            // which only widens the exclusion)
+            let created_at = captured.iter().position(|s| {
+                s.incarnation as usize == k - 1
+                    && false == s.header.rst
+                    && (s.header.syn || (s.header.ack && false == s.payload.is_empty()))
+            });
             let previous_end = captured
                 .iter()
-                .position(|s| s.incarnation as usize == k - 1 && s.header.rst)
+                .enumerate()
+                .position(|(i, s)| {
+                    s.incarnation as usize == k - 1
+                        && s.header.rst
+                        && created_at.is_some_and(|at| at < i)
+                })
                 .unwrap_or(captured.len());
             // an ACK number of the connection that the open connection before
             // takes for its own: the kept ACK of a stream without a start
             // there, or, within k windows past what the capture showed of
-            // that stream, an ACK of bytes it lost
+            // that stream once the connection existed, an ACK of bytes it
+            // lost
             let takes_ack = |segment: &TestSegment, i: usize| {
                 let role = segment.sender.other();
-                let shown: Vec<u32> = captured[..i]
+                let created = created_at.unwrap_or(i);
+                let shown: Vec<u32> = captured[created.min(i)..i]
                     .iter()
                     .filter(|s| s.incarnation as usize == k - 1)
                     .filter_map(|s| {
