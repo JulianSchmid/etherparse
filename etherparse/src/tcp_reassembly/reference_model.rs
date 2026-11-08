@@ -134,6 +134,10 @@ struct ModelStream {
     /// True offset an absorbed late ACK of the other side showed the stream
     /// reached, once the connection was replaced.
     late_end: Option<u64>,
+    /// True offset after the furthest segment of the sender that the
+    /// receiver accepted, with its bytes and FIN (a pure ACK's offset is
+    /// where its sender is; `None` before one, and after a resync).
+    furthest: Option<u64>,
     /// Number of segments with bytes that differ from the bytes received
     /// first (from the read and ACKed offsets on).
     conflicting_retransmissions: u64,
@@ -765,18 +769,19 @@ impl ModelStream {
 
     /// True offset the stream's sender reached, as far as the stream knows:
     /// after its highest byte, or after its FIN, or the other side's kept
-    /// ACK without a start, or what an absorbed late ACK of the other side
-    /// showed; `None` without any.
+    /// ACK without a start, or after the furthest segment the receiver
+    /// accepted, or what an absorbed late ACK of the other side showed;
+    /// `None` without any.
     fn end_offset(&self) -> Option<u64> {
         let fin = u64::from(self.fin_offset.is_some());
         let end = self
             .base
             .map(|_| (self.highest as i64 + self.shift) as u64 + fin)
             .or(self.kept_ack.map(|(ack, _)| ack));
-        match (end, self.late_end) {
-            (None, None) => None,
-            (end, late) => Some(end.unwrap_or(0).max(late.unwrap_or(0))),
-        }
+        [end, self.furthest, self.late_end]
+            .into_iter()
+            .flatten()
+            .max()
     }
 
     /// Returns true if the stream takes its own SYN `segment` (see
@@ -934,6 +939,7 @@ impl ModelStream {
         self.resync_ack = None;
         self.leading_ack = None;
         self.leading_data = None;
+        self.furthest = None;
         self.forced = false;
     }
 
@@ -1661,6 +1667,12 @@ impl ReferenceModel {
             &self.config,
             available,
         );
+        // the sender sent the numbers before the segment's end
+        let stream = &mut self.streams[sender];
+        if plausible && stream.base.is_some() {
+            let end = segment.offset + segment.payload.len() as u64 + u64::from(header.fin);
+            stream.furthest = stream.furthest.max(Some(end));
+        }
         // a retransmitted or late SYN carries the window from the start
         if plausible && false == (header.syn && self.windows[sender].is_some()) {
             self.windows[sender] = Some(header.window_size);
