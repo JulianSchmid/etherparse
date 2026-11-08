@@ -138,6 +138,14 @@ pub struct TcpReassemblyConfig {
     /// gives the room of a burst back down to this capacity, and takes it
     /// again for the next burst, and a stream's buffer takes at most about
     /// four times the bytes it holds.
+    ///
+    /// This capacity is also what an idle stream keeps whose buffer once
+    /// grew, e.g. while a hole waited to be given up, even after every byte
+    /// was read: with the default, 100,000 idle connections with one such
+    /// stream each hold about 6.5 GB, which
+    /// [`TcpReassemblyConfig::max_total_buffered`] doesn't bound. A monitor
+    /// with many concurrent connections lowers it (e.g. to 4 KiB) and
+    /// trades a few more buffer moves per burst for it.
     pub max_pooled_buffer_capacity: usize,
 }
 
