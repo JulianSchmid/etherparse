@@ -1456,21 +1456,6 @@ impl ReferenceModel {
                 self.streams[role_index(receiver)].answer_syn(segment, range, window, same_script);
             }
         }
-        let had_base = self.streams[sender].base.is_some();
-        // a SYN kept as possibly blind whose stream starts from these bytes
-        // is applied first if they lie within k windows after it (D1)
-        if false == had_base && false == header.syn {
-            let range = self.range(sender_role);
-            let first = self.reconnect_syn.as_ref().is_some_and(|syn| {
-                self.reconnect_syn_maybe_blind
-                    && self.sender_role(syn) == sender_role
-                    && segment.offset >= syn.offset
-                    && segment.offset - syn.offset <= range
-            });
-            if let Some(syn) = self.reconnect_syn.take_if(|_| first) {
-                self.apply_kept_syn(syn, available);
-            }
-        }
         let observed = self.streams.each_ref().map(|stream| stream.observed);
         // the ACK of a SYN-ACK that the other stream's kept ACK refuses
         // as its start is not kept either
