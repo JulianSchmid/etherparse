@@ -147,3 +147,8 @@ Understandability: S5, C1, C2 and C4 are rules and tables now, with their reason
 4. The leading data and the furthest segment were sequence numbers that only a resync cleared, so after about 2^32 bytes an old one mapped ahead again. They are offsets now.
 
 Understandability: S3, S4, K2 and K4 are rules now, with the stall bound stated once in K4. Their reasons and history moved into ADR-0002.
+
+The gate after round 37's fixes found three more things, with the census seeds now varied by `PROPTEST_RNG_SEED`:
+- In one direction, no ACK covers a hole, and K2's distance of half the buffer counts from the hole's end. A hole of two 60,000-byte segments plus that distance overflowed a 256 KiB buffer. K4(d) now gives up the hole at the read position once half the buffer is filled from it, whatever covers it. The buffer still overflows if one packet brings more than the other half (a run of lost segments and the one after it); the pressure census names that as a known limit.
+- A burst from the stream's first byte, longer than k windows, while the server's tap lags past k windows from the start: no byte moves the stream forward, so the leading ACKs never widen the window, and the stream resyncs (R2). This is a known limit of K1 that predates round 37; the bulk census names it. Fixing it collides with R2's ACK-first jumps, so it is left to the owner.
+- The detector of "segments before the handshake" missed an ACK that became the leading ACK and counted once the old stream's bytes came within k windows of it. K1 at k windows made that reach possible.
