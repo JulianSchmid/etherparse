@@ -509,6 +509,18 @@ impl TcpStream {
         }
     }
 
+    /// Sequence number the stream's sender sends next, as far as the stream
+    /// knows: the one after its highest byte, or after its FIN; `None`
+    /// without a start.
+    pub(crate) fn next_seq(&self) -> Option<u32> {
+        let fin = u32::from(self.fin_offset.is_some());
+        self.start_seq.map(|start_seq| {
+            start_seq
+                .wrapping_add(self.highest_offset() as u32)
+                .wrapping_add(fin)
+        })
+    }
+
     /// Number of placeholder bytes a mid-stream pickup puts in front of its
     /// first byte to take its own late SYN or SYN-ACK `tcp` (see
     /// [`TcpStream::takes_syn`]); 0 for other streams.

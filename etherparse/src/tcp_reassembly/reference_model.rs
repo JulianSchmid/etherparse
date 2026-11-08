@@ -1604,16 +1604,33 @@ impl ReferenceModel {
             && self.streams[role_index(sender.other())].syn_unacked
     }
 
-    /// Returns true if the SYN or SYN-ACK `segment` is a late duplicate of
-    /// the handshake of the connection this one replaced (C1): the pool
-    /// ignores it.
-    pub fn absorbs_late_handshake(&self, segment: &TestSegment) -> bool {
-        segment.header.syn
-            && false == segment.header.rst
-            && self
-                .replaced
-                .as_ref()
-                .is_some_and(|replaced| replaced.is_own_handshake(segment))
+    /// Returns true if `segment` is a late segment of the connection this
+    /// one replaced (C1), which the pool ignores: a duplicate of its
+    /// handshake, or, while a stream of this connection has no start, a
+    /// segment without SYN and bytes at the offset a replaced stream reached
+    /// (see [`ReferenceModel::is_own_end`]).
+    pub fn absorbs_late_segment(&self, segment: &TestSegment) -> bool {
+        let Some(replaced) = self.replaced.as_ref() else {
+            return false;
+        };
+        if segment.header.syn {
+            return false == segment.header.rst && replaced.is_own_handshake(segment);
+        }
+        self.streams.iter().any(|stream| stream.base.is_none()) && replaced.is_own_end(segment)
+    }
+
+    /// Returns true if `segment` comes from the connection's script, has no
+    /// SYN and no bytes, and lies at the offset its sender's stream reached
+    /// (after its highest byte, or after its FIN): a late ACK or RST of the
+    /// connection.
+    fn is_own_end(&self, segment: &TestSegment) -> bool {
+        let stream = &self.streams[role_index(self.sender_role(segment))];
+        let fin = u64::from(stream.fin_offset.is_some());
+        Some(segment.incarnation) == self.incarnation
+            && false == segment.header.syn
+            && segment.payload.is_empty()
+            && stream.base.is_some()
+            && segment.offset as i64 == stream.highest as i64 + stream.shift + fin as i64
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` is the own one of its
@@ -2021,9 +2038,8 @@ mod test {
             if false == model.predicts(segment) {
                 continue;
             }
-            // a late duplicate of the replaced connection's handshake is
-            // ignored
-            if model.absorbs_late_handshake(segment) {
+            // a late segment of the replaced connection is ignored
+            if model.absorbs_late_segment(segment) {
                 let processed = segment.feed(pool, ());
                 prop_assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
                 continue;

@@ -139,15 +139,16 @@ where
     /// [`TcpConnectionEnd::Reset`]), is handed over in
     /// [`TcpProcessed::ended`]. Its late segments are then ignored with
     /// [`TcpIgnoreReason::AfterEnd`], also retransmissions of its SYN and
-    /// SYN-ACK. A SYN or SYN-ACK with a new ISN starts a new connection with
-    /// a new id (a reconnect).
+    /// SYN-ACK.
     ///
-    /// A SYN or SYN-ACK with a new ISN from an endpoint of an open connection
-    /// is a reconnect, in either order of the handshake's capture: it hands
-    /// the connection over in [`TcpProcessed::ended`] (see
-    /// [`TcpConnectionEnd::Reconnect`]), and the reconnect, which starts at
-    /// it, is [`TcpProcessed::active`]. A retransmission of the connection's
-    /// own SYN or SYN-ACK repeats its ISN and starts none.
+    /// A SYN or SYN-ACK with a new ISN from an endpoint of an ended or open
+    /// connection is a reconnect, in either order of the handshake's
+    /// capture: it starts a new connection with a new id, which is
+    /// [`TcpProcessed::active`], and hands an open connection over in
+    /// [`TcpProcessed::ended`] (see [`TcpConnectionEnd::Reconnect`]). A
+    /// retransmission of the connection's own SYN or SYN-ACK repeats its
+    /// ISN and starts none, and late segments of the replaced connection
+    /// are ignored with [`TcpIgnoreReason::AfterEnd`] too.
     pub fn process_segment(
         &mut self,
         segment: TcpSegment<'_, CustomChannelId>,
@@ -170,9 +171,9 @@ where
         let mut entry = match self.connections.entry(key) {
             Entry::Occupied(mut entry) => {
                 let connection = entry.get_mut();
-                // a late duplicate of the handshake of the connection this
-                // one replaced is absorbed like on a tombstone (C1)
-                if connection.absorbs_late_handshake(source, &tcp) {
+                // a late segment of the connection this one replaced is
+                // absorbed like on a tombstone (C1)
+                if connection.absorbs_late_segment(source, &tcp) {
                     return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
                 }
                 if connection.starts_reconnect(source, &tcp, &self.config, available) {
@@ -1390,6 +1391,94 @@ mod test {
                 0,
                 connection.stream(Initiator).status().out_of_window_segments
             );
+        }
+
+        // a server in TIME-WAIT answers a new SYN whose ISN lies below the
+        // old stream's end with an ACK of the old FIN, and the client resets
+        // that ACK and retransmits its SYN (RFC 9293 3.10.7.3): both are
+        // late segments of the replaced connection (C1), so they neither
+        // fake a hole in the reconnect nor reset it, and the reconnect goes
+        // on with the retransmitted SYN
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(10_000_000, 20_000_000);
+            old.handshake()
+                .send(Initiator, b"req")
+                .fin(Responder)
+                .fin(Initiator)
+                .ack(Responder);
+            let processed = old.feed_all(&mut pool);
+            assert_eq!(
+                Some(TcpConnectionEnd::Finished),
+                processed.ended.unwrap().end()
+            );
+            // the old client sent up to 10_000_005: new ISN 2 MB below it
+            let mut script = ConnectionScript::with_isns(8_000_005, 30_000_000);
+            script.syn();
+            let (connection, _) = script.segments[0].feed(&mut pool, 7).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            // the TIME-WAIT ACK and the client's RST
+            old.ack(Responder).rst(Initiator);
+            for index in [old.segments.len() - 2, old.segments.len() - 1] {
+                let processed = old.segments[index].feed(&mut pool, 8);
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+            script
+                .syn()
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"new");
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"new"), stream.read_received());
+            assert_eq!(0, stream.status().gaps);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(3, stream.highest_offset());
+        }
+
+        // in a capture merged from two taps, the old close's last ACK can
+        // arrive after the reconnect's SYN with a near ISN: it is a late
+        // segment of the replaced connection (C1) and fakes no hole, while
+        // the same ACK after the handshake goes to the reconnect, whose
+        // responder stream doesn't accept it far before its bytes
+        for complete in [false, true] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(10_000_000, 20_000_000);
+            old.handshake()
+                .send(Initiator, b"req")
+                .fin(Responder)
+                .fin(Initiator)
+                .ack(Responder);
+            let last_ack = old.segments.pop().unwrap();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(8_000_005, 30_000_000);
+            script.handshake().send(Initiator, b"new");
+            let processed = script.segments[0].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let fed = if complete { 3 } else { 1 };
+            if complete {
+                script.feed(&mut pool, 1..fed);
+            }
+            let processed = last_ack.feed(&mut pool, 8);
+            if complete {
+                assert_eq!(None, processed.ignored);
+                let (connection, _) = processed.active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!((0, 0), (stream.highest_offset(), stream.acked_offset()));
+            } else {
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+            let (connection, _) = script.feed(&mut pool, fed..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"new"), stream.read_received());
+            assert_eq!(0, stream.status().gaps);
+            assert_eq!(3, stream.highest_offset());
         }
 
         // the tombstone of a reconnect absorbs late duplicates of the replaced
