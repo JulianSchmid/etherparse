@@ -1234,13 +1234,9 @@ impl ReferenceModel {
         let range = self.range(sender_role.other());
         let other_window = self.window(sender_role.other());
         // a side in SYN-RECEIVED checks an RST by its sequence number (F4),
-        // and a SYN-ACK that ACKs the kept SYN confirms the reconnect (C2)
-        let acks_kept_syn = header.syn
-            && false == (header.rst || header.fin)
-            && self
-                .kept_syn
-                .as_ref()
-                .is_some_and(|syn| acks_syn(segment, syn));
+        // and a SYN-ACK is never dropped: it answers the SYN or starts a
+        // reconnect (C2)
+        let syn_ack = header.syn && header.ack && false == (header.rst || header.fin);
         // every receiver drops a segment without ACK that is no SYN or RST
         // (S6)
         let same_script = Some(segment.incarnation) == self.incarnation;
@@ -1248,7 +1244,7 @@ impl ReferenceModel {
         let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
         let dropped = without_ack
             || (false == (header.rst && self.streams[sender].base.is_some())
-                && false == acks_kept_syn
+                && false == syn_ack
                 && self.streams[other].drops_before_syn_acked(
                     segment,
                     range,
@@ -1290,10 +1286,7 @@ impl ReferenceModel {
                 self.streams[sender].out_of_window_segments += 1;
             }
         } else if header.syn && self.maybe_blind_syn(segment) {
-            if header.ack {
-                // a SYN-ACK that may be blind is ignored (S5)
-                self.streams[sender].out_of_window_segments += 1;
-            } else if let Some(syn) = self
+            if let Some(syn) = self
                 .kept_syn
                 .as_mut()
                 .filter(|syn| retransmits_syn(segment, syn))
@@ -1509,18 +1502,11 @@ impl ReferenceModel {
         if false == header.syn || header.rst || header.fin {
             return false;
         }
-        // a SYN-ACK that ACKs the kept SYN is applied (S5)
-        let acks_kept_syn = self
-            .kept_syn
-            .as_ref()
-            .is_some_and(|syn| acks_syn(segment, syn));
-        if false == acks_kept_syn && self.dropped_before_syn_acked(segment) {
+        // a SYN-ACK is never dropped (S5)
+        if false == header.ack && self.dropped_before_syn_acked(segment) {
             return false;
         }
-        false
-            == (self.maybe_blind_syn(segment)
-                || self.is_own_syn(segment)
-                || self.answers_observed_syn(segment))
+        false == (self.maybe_blind_syn(segment) || self.is_own_handshake_half(segment))
     }
 
     /// Returns true if the receiver drops `segment` while its SYN is
@@ -1551,8 +1537,31 @@ impl ReferenceModel {
     /// blind, so it is only kept (S5).
     fn maybe_blind_syn(&self, segment: &TestSegment) -> bool {
         let sender = self.sender_role(segment);
-        self.streams[role_index(sender)].base.is_none()
+        false == segment.header.ack
+            && self.streams[role_index(sender)].base.is_none()
             && self.streams[role_index(sender.other())].syn_unacked
+    }
+
+    /// Returns true if the SYN or SYN-ACK `segment` is the own one of its
+    /// sender's stream: it ACKs the other stream's observed SYN, or it lies
+    /// where the stream's SYN can (see [`ReferenceModel::is_own_syn`]),
+    /// unless it is a SYN-ACK into a stream without an observed start that
+    /// doesn't ACK the other stream's observed SYN, which answers another
+    /// SYN (C2).
+    fn is_own_handshake_half(&self, segment: &TestSegment) -> bool {
+        let sender = role_index(self.sender_role(segment));
+        let other = &self.streams[role_index(self.sender_role(segment).other())];
+        let acks_observed_syn = Some(segment.incarnation) == self.incarnation
+            && match (other.base, segment.ack) {
+                (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
+                _ => false,
+            };
+        let answers_other_syn = segment.header.ack
+            && other.observed
+            && false == acks_observed_syn
+            && false == self.streams[sender].observed;
+        self.answers_observed_syn(segment)
+            || (false == answers_other_syn && self.is_own_syn(segment))
     }
 
     /// Range before and after the bytes of the stream of `role` that its

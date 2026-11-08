@@ -1306,6 +1306,34 @@ mod test {
             }
         }
 
+        // a SYN-ACK that answers another SYN than the unanswered one of the
+        // connection starts a reconnect, also while that SYN waits (S5): a
+        // failed attempt whose answer was never captured doesn't block the
+        // next attempt, whose SYN the capture missed
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.syn();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(1_000_000_000, 2_000_000_000);
+            script
+                .syn()
+                .syn_ack()
+                .ack(Initiator)
+                .send(Responder, b"banner");
+            let processed = script.segments[1].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"banner"),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
         // a retransmission of the reconnect's SYN is the reconnect's own and
         // starts no further one, a SYN with another new ISN does
         {

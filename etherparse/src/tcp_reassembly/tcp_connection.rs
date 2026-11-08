@@ -181,7 +181,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 }
             }
             Verdict::Reset => self.add_reset(sender, tcp, config),
-            Verdict::Ignored => self.stream_mut(sender).count_out_of_window(),
             Verdict::KeepSyn => self.keep_syn(source, tcp, free),
             // the pool replaced the connection before the segment got here
             Verdict::StartsReconnect => {}
@@ -279,27 +278,28 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if false == tcp.syn() {
             return Verdict::Applied;
         }
-        // a SYN of a side without a start while the other side's SYN is
-        // unanswered may be blind, unless it is the SYN-ACK that answers it:
-        // a simultaneous open's SYN-ACK repeats its ISN and anchors the
-        // stream, so the SYN is only kept (S5)
+        // a SYN without ACK of a side without a start while the other side's
+        // SYN is unanswered may be blind: a simultaneous open's SYN-ACK
+        // repeats its ISN and anchors the stream, so the SYN is only kept
+        // (S5)
         let stream = self.stream(sender);
         let other = self.stream(sender.other());
-        if false == stream.has_start()
-            && other.awaits_syn_ack()
-            && false == other.acks_unacked_syn(tcp, window, config)
-        {
-            return if tcp.ack() {
-                Verdict::Ignored
-            } else {
-                Verdict::KeepSyn
-            };
+        if false == (tcp.ack() || stream.has_start()) && other.awaits_syn_ack() {
+            return Verdict::KeepSyn;
         }
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
-        // whatever ACK a blind segment left kept for its stream (S5); the
-        // stream refuses and counts an own late SYN it can't take (A5, C4)
+        // whatever ACK a blind segment left kept for its stream (S5), while a
+        // SYN-ACK into a stream without an observed SYN that doesn't ACK the
+        // other stream's observed SYN answers another SYN (C2); the stream
+        // refuses and counts an own late SYN it can't take (A5, C4)
+        let answers_other_syn = tcp.ack()
+            && stream.isn().is_none()
+            && other
+                .syn()
+                .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
         if self.answers_observed_syn(sender, tcp)
-            || stream.is_own_syn(tcp, self.window(sender, config), config)
+            || (false == answers_other_syn
+                && stream.is_own_syn(tcp, self.window(sender, config), config))
         {
             Verdict::Applied
         } else {
@@ -418,9 +418,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// a side with neither a start nor a kept ACK has to ACK the SYN also
     /// after the wait. A receiver in SYN-RECEIVED, whose other side has a
     /// start, checks an RST by its sequence number instead (RFC 9293
-    /// 3.10.7.4, F4), and a SYN-ACK without RST and FIN that ACKs the kept
-    /// SYN of a simultaneous open answers that SYN and is applied. `window`
-    /// is the receive window of the receiver's stream.
+    /// 3.10.7.4, F4), and a SYN-ACK without RST and FIN is never dropped: it
+    /// answers the SYN (also a kept one of a simultaneous open), or it
+    /// belongs to another handshake and starts a reconnect (C2). `window` is
+    /// the receive window of the receiver's stream.
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
@@ -431,13 +432,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if tcp.rst() && self.stream(sender).has_start() {
             return false;
         }
-        if tcp.syn()
-            && false == (tcp.rst() || tcp.fin())
-            && self
-                .kept_syn
-                .as_ref()
-                .is_some_and(|syn| syn.is_acked_by(self.endpoint(sender), tcp))
-        {
+        // a SYN-ACK either answers the SYN (also a kept one of a
+        // simultaneous open), or belongs to another handshake and starts a
+        // reconnect (C2)
+        if tcp.syn() && tcp.ack() && false == (tcp.rst() || tcp.fin()) {
             return false;
         }
         let bare =
@@ -690,10 +688,6 @@ enum Verdict {
     /// An RST, which F4 checks by its sequence number (the ACK of an ignored
     /// one is dropped with it).
     Reset,
-    /// A SYN-ACK of a side without a start while the other side's SYN is
-    /// unanswered that doesn't ACK it: it may be blind, so it is ignored and
-    /// counts as out-of-window (S5).
-    Ignored,
     /// A SYN without ACK of a side without a start while the other side's
     /// SYN is unanswered, which may be blind: kept until a SYN-ACK confirms
     /// it as the SYN of a simultaneous open (S5).
@@ -1012,17 +1006,14 @@ mod test {
         let mut script = ConnectionScript::with_isns(1000, 2000);
         script.handshake().send(Initiator, b"abc");
         // a retransmission updates it too, and so do an RST outside of the
-        // receiver's window, the SYN of a reconnect and a SYN-ACK with
-        // another ISN
+        // receiver's window and the SYN of a reconnect (in the connection it
+        // starts)
         let retransmission = script.segments[3].clone();
         script.segments.push(retransmission);
         script.rst_at(Responder, 1 << 30);
         let mut syn = script.segments[0].clone();
         syn.header.sequence_number = 5000;
         script.segments.push(syn);
-        let mut syn_ack = script.segments[1].clone();
-        syn_ack.header.sequence_number = 6000;
-        script.segments.push(syn_ack);
         for (i, segment) in script.segments.iter().enumerate() {
             let (connection, _) = segment.feed(&mut pool, 10 + i as u32).active.unwrap();
             assert_eq!(&(10 + i as u32), connection.last_seen());
@@ -1132,44 +1123,6 @@ mod test {
                 Some(TcpConnectionEnd::Reset { by: Responder }),
                 connection.end()
             );
-        }
-
-        // a SYN-ACK that doesn't ACK the SYN is dropped too, with its ACK
-        // number and window, and so is a FIN after its ISN: the real SYN-ACK
-        // anchors the responder stream
-        {
-            let mut pool = TcpReassemblyPool::<(), ()>::default();
-            let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.syn();
-            let mut forged = script.injected(|s| {
-                s.syn_ack();
-            });
-            forged.header.sequence_number = 7000;
-            forged.header.acknowledgment_number = 1001 + (1 << 30);
-            forged.header.window_size = 0;
-            script.segments.push(forged);
-            let mut fin = script.injected(|s| {
-                s.fin_at(Responder, 0, b"");
-            });
-            fin.header.sequence_number = 7001;
-            fin.header.ack = false;
-            fin.ack = None;
-            script.segments.push(fin);
-            script
-                .syn_ack()
-                .ack(Initiator)
-                .send(Initiator, b"request")
-                .send(Responder, b"response");
-            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-            let stream = connection.stream_mut(Initiator);
-            assert_eq!(TcpRead::Data(b"request"), stream.read_received());
-            assert_eq!(0, stream.status().out_of_window_segments);
-            let stream = connection.stream_mut(Responder);
-            assert_eq!(TcpStreamStart::Observed, stream.status().start);
-            assert_eq!(Some(2000), stream.isn());
-            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
-            assert!(false == stream.is_finished());
-            assert_eq!(2, stream.status().out_of_window_segments);
         }
 
         // a SYN without ACK of the responder may be a simultaneous open and
@@ -1509,24 +1462,27 @@ mod test {
             );
         }
 
-        // a SYN-ACK has to ACK the SYN itself: one that ACKs 50 bytes after
-        // it is dropped, although other segments may ACK that far
+        // a SYN-ACK has to ACK the SYN itself to answer it: one that ACKs 50
+        // bytes after it answers another SYN and starts a reconnect (C2),
+        // although other segments may ACK that far
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.syn();
-            let mut forged = script.injected(|s| {
+            let mut other = script.injected(|s| {
                 s.syn_ack();
             });
-            forged.header.sequence_number = 7000;
-            forged.header.acknowledgment_number = 1001 + 50;
-            script.segments.push(forged);
-            script.syn_ack().ack(Initiator).send(Responder, b"response");
-            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-            let stream = connection.stream_mut(Responder);
-            assert_eq!(Some(2000), stream.isn());
-            assert_eq!(1, stream.status().out_of_window_segments);
-            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+            other.header.sequence_number = 7000;
+            other.header.acknowledgment_number = 1001 + 50;
+            script.segments.push(other);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(Some(7000), connection.stream(Responder).isn());
         }
 
         // the wait that dropped segments ended leaves the other side with
