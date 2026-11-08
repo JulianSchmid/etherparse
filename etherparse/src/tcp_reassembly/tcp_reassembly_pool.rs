@@ -1398,29 +1398,39 @@ mod test {
         // that ACK and retransmits its SYN (RFC 9293 3.10.7.3): both are
         // late segments of the replaced connection (C1), so they neither
         // fake a hole in the reconnect nor reset it, and the reconnect goes
-        // on with the retransmitted SYN
-        {
+        // on with the retransmitted SYN; also when the capture missed the
+        // client's FIN and the last ACK (the TIME-WAIT ACK then tells where
+        // the client's stream ended), and across a sequence number wrap
+        for (lost_close, client_isn) in [
+            (false, 10_000_000),
+            (true, 10_000_000),
+            (true, u32::MAX - 2),
+        ] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
-            let mut old = ConnectionScript::with_isns(10_000_000, 20_000_000);
+            let mut old = ConnectionScript::with_isns(client_isn, 20_000_000);
             old.handshake()
                 .send(Initiator, b"req")
                 .fin(Responder)
                 .fin(Initiator)
                 .ack(Responder);
+            let mut late = old.clone();
+            if lost_close {
+                old.segments.truncate(old.segments.len() - 2);
+            }
             let processed = old.feed_all(&mut pool);
-            assert_eq!(
-                Some(TcpConnectionEnd::Finished),
-                processed.ended.unwrap().end()
-            );
-            // the old client sent up to 10_000_005: new ISN 2 MB below it
-            let mut script = ConnectionScript::with_isns(8_000_005, 30_000_000);
+            let old_end = processed.ended.map(|connection| connection.end());
+            assert_eq!(lost_close, old_end.is_none());
+            // the old client sent up to its ISN + 5: new ISN 2 MB below it
+            let mut script =
+                ConnectionScript::with_isns(client_isn.wrapping_sub(2_000_000), 30_000_000);
             script.syn();
-            let (connection, _) = script.segments[0].feed(&mut pool, 7).active.unwrap();
-            assert_eq!(TcpConnectionId(1), connection.id());
+            let processed = script.segments[0].feed(&mut pool, 7);
+            assert_eq!(lost_close, processed.ended.is_some());
+            assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
             // the TIME-WAIT ACK and the client's RST
-            old.ack(Responder).rst(Initiator);
-            for index in [old.segments.len() - 2, old.segments.len() - 1] {
-                let processed = old.segments[index].feed(&mut pool, 8);
+            late.ack(Responder).rst(Initiator);
+            for index in [late.segments.len() - 2, late.segments.len() - 1] {
+                let processed = late.segments[index].feed(&mut pool, 8);
                 assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             }
             script

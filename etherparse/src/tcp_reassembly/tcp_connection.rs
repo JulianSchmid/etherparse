@@ -636,7 +636,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             return false == tcp.rst() && replaced.is_own_handshake(source, tcp);
         }
         false == (self.initiator_stream.has_start() && self.responder_stream.has_start())
-            && replaced.is_own_end(source, tcp)
+            && replaced.absorbs_end(source, tcp)
     }
 
     /// What the pool keeps of the connection once it ended.
@@ -752,12 +752,25 @@ impl SeqNumbers {
 
     /// Returns true if `tcp`, sent by `source`, is a segment without SYN and
     /// bytes at the sequence number the sender's stream reached: a late ACK
-    /// or RST of the ended connection.
-    pub fn is_own_end(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
-        let [own, _] = self.roles(source);
-        false == tcp.syn()
-            && tcp.payload().is_empty()
-            && Some(tcp.sequence_number()) == self.next[own]
+    /// or RST of the ended connection. The ACK number of such an ACK moves
+    /// the number the other stream reached forward: the capture may have
+    /// missed that stream's FIN, and the RST that answers the ACK lies at
+    /// the ACK number (RFC 9293 3.10.7.3).
+    pub fn absorbs_end(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        let [own, other] = self.roles(source);
+        if tcp.syn()
+            || false == tcp.payload().is_empty()
+            || Some(tcp.sequence_number()) != self.next[own]
+        {
+            return false;
+        }
+        if tcp.ack() && false == tcp.rst() {
+            let ack = tcp.acknowledgment_number();
+            if self.next[other].is_none_or(|next| 0 < ack.wrapping_sub(next) as i32) {
+                self.next[other] = Some(ack);
+            }
+        }
+        true
     }
 
     /// Indices of the stream of `source` and of the other stream.

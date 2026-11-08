@@ -128,6 +128,9 @@ struct ModelStream {
     highest: u64,
     /// Offset of the FIN.
     fin_offset: Option<u64>,
+    /// True offset an absorbed late ACK of the other side showed the stream
+    /// reached, once the connection was replaced.
+    late_acked: Option<u64>,
     /// Number of segments with bytes that differ from the bytes received
     /// first (from the read and ACKed offsets on).
     conflicting_retransmissions: u64,
@@ -685,6 +688,21 @@ impl ModelStream {
         self.observed = true;
         self.syn_len = len as u64;
         true
+    }
+
+    /// True offset the stream's sender reached, as far as the stream knows:
+    /// after its highest byte, or after its FIN, or what an absorbed late
+    /// ACK of the other side showed (also for a stream without a start);
+    /// `None` without either.
+    fn end_offset(&self) -> Option<u64> {
+        let fin = u64::from(self.fin_offset.is_some());
+        let end = self
+            .base
+            .map(|_| (self.highest as i64 + self.shift) as u64 + fin);
+        match (end, self.late_acked) {
+            (None, None) => None,
+            (end, late) => Some(end.unwrap_or(0).max(late.unwrap_or(0))),
+        }
     }
 
     /// Returns true if the stream takes its own SYN `segment` (see
@@ -1609,28 +1627,38 @@ impl ReferenceModel {
     /// handshake, or, while a stream of this connection has no start, a
     /// segment without SYN and bytes at the offset a replaced stream reached
     /// (see [`ReferenceModel::is_own_end`]).
-    pub fn absorbs_late_segment(&self, segment: &TestSegment) -> bool {
-        let Some(replaced) = self.replaced.as_ref() else {
+    pub fn absorbs_late_segment(&mut self, segment: &TestSegment) -> bool {
+        let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if segment.header.syn {
             return false == segment.header.rst && replaced.is_own_handshake(segment);
         }
-        self.streams.iter().any(|stream| stream.base.is_none()) && replaced.is_own_end(segment)
+        self.streams.iter().any(|stream| stream.base.is_none()) && replaced.absorbs_end(segment)
     }
 
     /// Returns true if `segment` comes from the connection's script, has no
     /// SYN and no bytes, and lies at the offset its sender's stream reached
-    /// (after its highest byte, or after its FIN): a late ACK or RST of the
-    /// connection.
-    fn is_own_end(&self, segment: &TestSegment) -> bool {
-        let stream = &self.streams[role_index(self.sender_role(segment))];
-        let fin = u64::from(stream.fin_offset.is_some());
-        Some(segment.incarnation) == self.incarnation
-            && false == segment.header.syn
-            && segment.payload.is_empty()
-            && stream.base.is_some()
-            && segment.offset as i64 == stream.highest as i64 + stream.shift + fin as i64
+    /// (after its highest byte, or after its FIN, or an absorbed ACK of the
+    /// other side): a late ACK or RST of the connection. The ACK number of
+    /// such an ACK moves the offset the other stream reached forward.
+    fn absorbs_end(&mut self, segment: &TestSegment) -> bool {
+        let sender = self.sender_role(segment);
+        let stream = &self.streams[role_index(sender)];
+        if Some(segment.incarnation) != self.incarnation
+            || segment.header.syn
+            || false == segment.payload.is_empty()
+            || Some(segment.offset) != stream.end_offset()
+        {
+            return false;
+        }
+        if let (Some(ack), false) = (segment.ack, segment.header.rst) {
+            let other = &mut self.streams[role_index(sender.other())];
+            if other.end_offset().is_none_or(|end| end < ack) {
+                other.late_acked = Some(ack);
+            }
+        }
+        true
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` is the own one of its
