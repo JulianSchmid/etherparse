@@ -958,6 +958,15 @@ impl ModelStream {
             }
             return;
         }
+        self.count_ack(offset, packet);
+    }
+
+    /// Counts the ACK of the pool offset `offset` in the packet with the
+    /// number `packet`, if it moves the ACK forward.
+    fn count_ack(&mut self, offset: i64, packet: u64) {
+        let Some(base) = self.base else {
+            return;
+        };
         if offset < self.resync_offset() as i64 {
             return;
         }
@@ -1039,12 +1048,13 @@ impl ModelStream {
         let window = window.unwrap_or(u64::from(config.fallback_window));
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         let reach = sent_end + window.max(self.largest_window.unwrap_or(0));
-        let reached = self
-            .leading_ack
-            .filter(|ack| self.base.is_some() && *ack as i64 - self.shift <= reach as i64);
-        if let Some(ack) = reached {
+        let Some(ack) = self.leading_ack else {
+            return;
+        };
+        let offset = ack as i64 - self.shift;
+        if self.base.is_some() && offset <= reach as i64 {
             self.leading_ack = None;
-            self.add_ack(ack, window, packet, config);
+            self.count_ack(offset, packet);
         }
     }
 

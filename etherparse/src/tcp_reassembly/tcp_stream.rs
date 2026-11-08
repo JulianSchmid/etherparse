@@ -1405,14 +1405,18 @@ impl TcpStream {
         let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
         let reach =
             i64::try_from(sent_end.saturating_add(self.sent_into(window))).unwrap_or(i64::MAX);
-        let reached = self.leading_ack.filter(|ack| {
-            self.start_seq
-                .and_then(|start_seq| self.offset(start_seq, *ack))
-                .is_some_and(|ack| ack <= reach)
-        });
-        if let Some(ack) = reached {
+        let Some(leading) = self.leading_ack else {
+            return;
+        };
+        let Some(ack) = self
+            .start_seq
+            .and_then(|start_seq| self.offset(start_seq, leading))
+        else {
+            return;
+        };
+        if ack <= reach {
             self.leading_ack = None;
-            self.add_ack(ack, window, packet, config);
+            self.count_ack(ack, packet);
         }
     }
 
@@ -1516,6 +1520,12 @@ impl TcpStream {
             self.add_resync_ack(ack_seq, window, packet, config);
             return;
         }
+        self.count_ack(ack, packet);
+    }
+
+    /// Counts the ACK of the offset `ack` in the packet with the number
+    /// `packet` as the seen ACK, if it moves it forward.
+    fn count_ack(&mut self, ack: i64, packet: u64) {
         // ACKs before a jump don't count after it
         if ack <= self.seen_ack as i64 || ack < self.resync_offset as i64 {
             return;
