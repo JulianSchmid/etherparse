@@ -1956,9 +1956,9 @@ mod test {
         /// Server segments the capture misses in a row (a burst), from the
         /// first one on, if any.
         burst: Option<(usize, usize)>,
-        /// Whether the taps lag from the start, the server's SYN-ACK and
-        /// the client's handshake ACK and request included (but not the
-        /// client's SYN); otherwise the lag starts after the handshake.
+        /// Whether the taps lag from the start, the handshake and the
+        /// client's request included; otherwise the lag starts after the
+        /// handshake.
         lag_from_start: bool,
         /// Whether the client closes first.
         client_closes_first: bool,
@@ -2067,15 +2067,15 @@ mod test {
         for syn in &mut script.segments {
             syn.header.window_size = u16::try_from(window).unwrap_or(u16::MAX);
         }
-        // the client's SYN comes first either way (a SYN-ACK before it is
-        // a known limit, C4), but its handshake ACK, which shows the scaled
-        // window, can come late
+        // the taps' lag can start with the handshake: the client's SYN and
+        // its handshake ACK, which shows the scaled window, can come late,
+        // and the server's SYN-ACK before the SYN (C4)
         let start_lag = if bulk.lag_from_start {
             bulk.lag
         } else {
             [0, 0]
         };
-        events.push((0, script.segments[0].clone()));
+        events.push((start_lag[0], script.segments[0].clone()));
         events.push((1 + start_lag[1], script.segments[1].clone()));
         script.ack(Initiator).send(Initiator, b"GET /");
         events.push((2 + start_lag[0], script.segments[2].clone()));
@@ -2688,6 +2688,21 @@ mod test {
         if 0 == rejected && got == expected && gaps == expected_gaps {
             return Ok(false);
         }
+        // without the client's ACKs, the implied ACK stays behind the last
+        // bytes, so a reader of the ACKed bytes gets a part of them
+        if one_direction && PressureReader::Acked == reader {
+            let prefix = expected_gaps
+                .iter()
+                .filter(|(at, _)| *at < got.len())
+                .count();
+            if 0 == rejected
+                && expected.starts_with(&got)
+                && gaps.len() >= prefix
+                && expected_gaps.starts_with(&gaps)
+            {
+                return Ok(false);
+            }
+        }
         // a known limit (K4): a run of lost segments and the one after it
         // that fill more than the room above the limit of K4(d) arrive in
         // one packet, which can overflow the buffer before a stalled reader
@@ -2768,9 +2783,11 @@ mod test {
             let wire_loss = false == one_direction
                 && rng.chance(333)
                 && pressure_window(max_stream_buffer, len) > max_stream_buffer as u64 / 2;
+            // a reader of the ACKed bytes of one direction keeps up if the
+            // buffer holds twice the window (the sizing rule)
             let reader = match rng.below(3) {
                 0 => PressureReader::Eager,
-                1 if one_direction => PressureReader::Eager,
+                1 if one_direction && max_stream_buffer < 8 << 20 => PressureReader::Eager,
                 1 => PressureReader::Acked,
                 _ => PressureReader::Late,
             };
