@@ -27,7 +27,9 @@
 /// - above twice them where it has only the sender's packets;
 /// - for captures that start mid-stream (which don't show the window
 ///   scale), also [`TcpReassemblyConfig::fallback_window`] above them, as
-///   it then stands in for the receiver's window.
+///   it then stands in for the receiver's window, but below
+///   `max_stream_buffer` by what your reader leaves unread between reads
+///   (the defaults keep half of the buffer for that).
 ///
 /// Otherwise a lost segment whose retransmission arrives after a full
 /// window of bytes becomes a gap although it was captured, or the bytes
