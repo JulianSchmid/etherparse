@@ -2396,6 +2396,65 @@ mod test {
             assert!(expected == got, "{behind} {acked}");
         }
 
+        // the fallback window stands in for a pickup's window at most up to
+        // the buffer less 64 KiB: with the default fallback window of 4 MiB
+        // in a buffer of 1 MiB, a reader of the ACKed bytes keeps up by the
+        // implied ACK while the capture loses the receiver's ACKs for one
+        // and a half buffers (regression test: the implied ACK lay the whole
+        // fallback window behind the bytes, and the bytes past the buffer
+        // were rejected)
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 1 << 20,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // a window of 64 KiB, the ACKs 60,000 bytes behind the bytes
+            script.window_scales = [Some(2); 2];
+            script.window_size = 16384;
+            script.handshake();
+            for i in 0..4000 {
+                script.send(Responder, &[(i % 251) as u8; 1460]);
+                let sent = (i + 1) * 1460;
+                if 1 == i % 2 && sent > 60_000 {
+                    script.ack_to(Initiator, sent - 60_000);
+                    // the capture loses the ACKs of segments 1000 to 2100
+                    if (1000..=2100).contains(&i) {
+                        script.segments.pop();
+                    }
+                }
+            }
+            script.ack(Initiator);
+            script.segments.drain(..3);
+            let (mut got, mut gaps, mut rejected) = (0, 0, 0);
+            // the server's stream, as the pool names its role
+            let mut server = None;
+            for segment in &script.segments {
+                let (connection, role) = segment.feed(&mut pool, ()).active.unwrap();
+                if Responder == segment.sender {
+                    server = Some(role);
+                }
+                let stream = connection.stream_mut(server.unwrap());
+                loop {
+                    match stream.read_acked() {
+                        TcpRead::Data(data) => {
+                            let len = data.len();
+                            got += len;
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { .. } => {
+                            gaps += 1;
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+                rejected = stream.status().rejected_bytes;
+            }
+            assert_eq!((4000 * 1460, 0, 0), (got, gaps, rejected));
+        }
+
         // the implied ACK lies at least the receiver's window behind the
         // bytes (K2), also on a mid-stream pickup, where the fallback window,
         // sized to the window, stands in for it once the receiver's ACKs

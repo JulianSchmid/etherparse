@@ -384,11 +384,15 @@ impl TcpStream {
     /// Receive window of the stream's receiver that K2's distance and K4(d)
     /// go by: the largest one it advertised, or, while its window is
     /// unknown (a mid-stream pickup shows no window scale), the fallback
-    /// window once the capture showed its ACKs; `None` without either, as
-    /// in a capture of one direction.
+    /// window once the capture showed its ACKs, but at most the buffer less
+    /// 64 KiB (half of a small buffer), the most K4(d) lets a hole wait, so
+    /// that an assumed window never puts the implied ACK further back than
+    /// a reader of the ACKed bytes can wait while the capture loses ACKs;
+    /// `None` without either, as in a capture of one direction.
     fn receiver_window(&self) -> Option<u64> {
+        let most = (self.max_buffer / 2).max(self.max_buffer.saturating_sub(64 << 10));
         self.largest_window
-            .or(self.acks_captured.then_some(self.fallback_window))
+            .or(self.acks_captured.then_some(self.fallback_window.min(most)))
     }
 
     /// Offset up to which the receiver must have ACKed the bytes (0 while no

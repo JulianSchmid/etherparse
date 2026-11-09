@@ -1153,10 +1153,12 @@ impl ModelStream {
     }
 
     /// The receiver's window that K2 and K4(d) go by: the largest one it
-    /// advertised, or the fallback window once the capture showed its ACKs.
+    /// advertised, or the fallback window once the capture showed its ACKs,
+    /// at most the buffer less 64 KiB (half of a small buffer).
     fn receiver_window(&self) -> Option<u64> {
+        let most = (self.max_buffer / 2).max(self.max_buffer.saturating_sub(64 << 10));
         self.largest_window
-            .or(self.acks_captured.then_some(self.fallback_window))
+            .or(self.acks_captured.then_some(self.fallback_window.min(most)))
     }
 
     /// Gives up the hole at the read offset if it is overdue, or once the
