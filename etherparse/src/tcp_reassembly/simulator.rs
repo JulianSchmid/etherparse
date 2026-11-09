@@ -2468,7 +2468,9 @@ mod test {
     /// after the handshake, at the server's first segment or, with loss on
     /// the wire, sometimes behind one the network lost and whose
     /// retransmission it misses, and the fallback window is the window, as
-    /// its doc advises. The `reader` must get every
+    /// its doc advises; with `lost_acks`, it is the default one instead,
+    /// and the capture loses the client's ACKs while the server sends one
+    /// and a half buffers. The `reader` must get every
     /// captured byte and a gap for each run of lost segments, and no byte
     /// may be rejected: a reader stalled at a hole gets past it before the
     /// buffer is full (K4(d)). Returns true if a run of lost segments and the one
@@ -2484,6 +2486,7 @@ mod test {
         wire_loss: bool,
         reader: PressureReader,
         pickup: bool,
+        lost_acks: bool,
         rng: &mut Rng,
     ) -> Result<bool, String> {
         let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
@@ -2512,6 +2515,10 @@ mod test {
         // before the pickup's first byte until that retransmission comes
         let behind = pickup && wire_loss && rng.chance(500);
         let start = usize::from(behind);
+        // the client's ACKs the capture loses: those while the server sends
+        // one and a half buffers, from a quarter of the transfer on
+        let ack_loss =
+            lost_acks.then(|| segments / 4..segments / 4 + 3 * max_stream_buffer / 2 / len);
         for i in 0..segments {
             let first_of_pickup = pickup && start == i;
             let lost =
@@ -2553,6 +2560,9 @@ mod test {
             if since_ack >= 2 || acked <= i {
                 since_ack = 0;
                 script.ack_to(Initiator, (acked * len) as u64);
+                if ack_loss.as_ref().is_some_and(|run| run.contains(&i)) {
+                    script.segments.pop();
+                }
             }
         }
         for &(_, j) in retransmissions.iter().filter(|(due, _)| *due >= segments) {
@@ -2574,13 +2584,14 @@ mod test {
         }
         let config = TcpReassemblyConfig {
             max_stream_buffer,
-            fallback_window: if pickup {
+            fallback_window: if pickup && false == lost_acks {
                 window as u32
             } else {
                 config().fallback_window
             },
             ..config()
         };
+        let fallback = u64::from(config.fallback_window);
         let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
         let (mut got, mut gaps, mut rejected) = (Vec::new(), Vec::new(), 0);
         let mut read = |connection: &mut TcpConnection<u32>, server: TcpRole| {
@@ -2670,8 +2681,17 @@ mod test {
             .map(<[bool]>::len)
             .max()
             .unwrap_or(0);
+        // (the default fallback window, at most the buffer less 64 KiB, for
+        // a pickup whose ACKs the capture loses)
         let half = max_stream_buffer as u64 / 2;
-        let limit = if wire_loss { half.max(window) } else { half };
+        let limit = if wire_loss {
+            half.max(window)
+        } else if lost_acks {
+            let most = half.max(max_stream_buffer as u64 - (64 << 10));
+            half.max(fallback.min(most))
+        } else {
+            half
+        };
         if ((longest_run + 1) * len) as u64 > max_stream_buffer as u64 - limit {
             return Ok(true);
         }
@@ -2736,6 +2756,15 @@ mod test {
                 _ => PressureReader::Late,
             };
             let pickup = rng.chance(333);
+            // a pickup with the default fallback window, whose ACKs the
+            // capture loses for a while; the room above the limit of K4(d) is
+            // then 64 KiB in a reduced buffer, which a late reader's batches
+            // don't fit (K4's stall bound), so it reads as packets come
+            let lost_acks = pickup
+                && false == one_direction
+                && false == wire_loss
+                && PressureReader::Late != reader
+                && rng.chance(500);
             let world = (
                 one_direction,
                 len,
@@ -2745,6 +2774,7 @@ mod test {
                 wire_loss,
                 reader,
                 pickup,
+                lost_acks,
             );
             match pressure_world(
                 one_direction,
@@ -2755,6 +2785,7 @@ mod test {
                 wire_loss,
                 reader,
                 pickup,
+                lost_acks,
                 &mut rng,
             ) {
                 Ok(limit) => hits += u64::from(limit),
