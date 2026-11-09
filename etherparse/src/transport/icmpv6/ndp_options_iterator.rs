@@ -1,7 +1,7 @@
 use crate::icmpv6::{
     MtuOptionSlice, NdpOptionHeader, NdpOptionReadError, NdpOptionSlice, NdpOptionType,
-    PrefixInformationOptionSlice, RedirectedHeaderOptionSlice, SourceLinkLayerAddressOptionSlice,
-    TargetLinkLayerAddressOptionSlice, UnknownNdpOptionSlice,
+    PrefixInformationOptionSlice, RecursiveDnsServerOptionSlice, RedirectedHeaderOptionSlice,
+    SourceLinkLayerAddressOptionSlice, TargetLinkLayerAddressOptionSlice, UnknownNdpOptionSlice,
 };
 
 /// Allows iterating over Neighbor Discovery options in an ICMPv6 payload.
@@ -52,6 +52,9 @@ impl<'a> NdpOptionsIterator<'a> {
             }
             NdpOptionType::PREFIX_INFORMATION => PrefixInformationOptionSlice::from_slice(option)
                 .map(NdpOptionSlice::PrefixInformation),
+            NdpOptionType::RDNSS => {
+                RecursiveDnsServerOptionSlice::from_slice(option).map(NdpOptionSlice::RecursiveDns)
+            }
             NdpOptionType::REDIRECTED_HEADER => RedirectedHeaderOptionSlice::from_slice(option)
                 .map(NdpOptionSlice::RedirectedHeader),
             NdpOptionType::MTU => MtuOptionSlice::from_slice(option).map(NdpOptionSlice::Mtu),
