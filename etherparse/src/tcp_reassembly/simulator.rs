@@ -1331,6 +1331,31 @@ mod test {
                         && created_at.is_some_and(|at| at < i)
                 })
                 .unwrap_or(captured.len());
+            // the end of what the capture showed of the stream of `role` of
+            // the connection before, from the connection's creation up to the
+            // position `until`
+            let shown_end = |role: TcpRole, until: usize| {
+                let created = created_at.unwrap_or(until).min(until);
+                captured[created..until]
+                    .iter()
+                    .filter(|s| s.incarnation as usize == k - 1)
+                    .filter_map(|s| {
+                        let end = |offset: u64| previous.seq(role, offset);
+                        if s.sender == role
+                            && (s.header.syn || s.header.fin || false == s.payload.is_empty())
+                        {
+                            Some(end(s.offset
+                                + s.payload.len() as u64
+                                + u64::from(s.header.fin)))
+                        } else if s.sender != role && s.header.syn && s.header.ack {
+                            // A2
+                            Some(end(0))
+                        } else {
+                            None
+                        }
+                    })
+                    .max_by_key(|end| end.wrapping_sub(previous.seq(role, 0)))
+            };
             // an ACK number of the connection that the open connection before
             // takes for its own: the kept ACK of a stream without a start
             // there, or, within k windows past what the capture showed of
@@ -1338,36 +1363,12 @@ mod test {
             // lost
             let takes_ack = |segment: &TestSegment, i: usize| {
                 let role = segment.sender.other();
-                // the end of what the capture showed of the stream from the
-                // connection's creation up to the position `until`
-                let shown_end = |until: usize| {
-                    let created = created_at.unwrap_or(until).min(until);
-                    captured[created..until]
-                        .iter()
-                        .filter(|s| s.incarnation as usize == k - 1)
-                        .filter_map(|s| {
-                            let end = |offset: u64| previous.seq(role, offset);
-                            if s.sender == role
-                                && (s.header.syn || s.header.fin || false == s.payload.is_empty())
-                            {
-                                Some(end(s.offset
-                                    + s.payload.len() as u64
-                                    + u64::from(s.header.fin)))
-                            } else if s.sender != role && s.header.syn && s.header.ack {
-                                // A2
-                                Some(end(0))
-                            } else {
-                                None
-                            }
-                        })
-                        .max_by_key(|end| end.wrapping_sub(previous.seq(role, 0)))
-                };
                 // one further ahead is the leading ACK, which counts once the
                 // stream's bytes reach within k windows of it (K1) before the
                 // new handshake or the connection's end
                 let last = half_at.unwrap_or(captured.len()).min(previous_end).max(i);
                 let ack = segment.ack.map(|ack| script.seq(role, ack));
-                match (shown_end(i), shown_end(last), ack) {
+                match (shown_end(role, i), shown_end(role, last), ack) {
                     (None, _, Some(_)) => true,
                     (Some(end), Some(last_end), Some(ack)) => {
                         0 < ack.wrapping_sub(end) as i32
@@ -1376,13 +1377,24 @@ mod test {
                     _ => false,
                 }
             };
-            // bytes before the handshake are lost, and an ACK number the open
-            // connection takes misleads it
+            // a FIN of the connection that the open connection before takes
+            // for the end of its sender's stream: one within k windows past
+            // what the capture showed of that stream (S4)
+            let takes_fin = |segment: &TestSegment, i: usize| {
+                let role = segment.sender;
+                let fin = script.seq(role, segment.offset + segment.payload.len() as u64);
+                shown_end(role, i).is_some_and(|end| {
+                    u64::try_from(fin.wrapping_sub(end) as i32).is_ok_and(|ahead| ahead <= range)
+                })
+            };
+            // bytes before the handshake are lost, and an ACK number or a FIN
+            // the open connection takes misleads it
             let before_handshake = captured.iter().enumerate().any(|(i, s)| {
                 s.incarnation as usize == k
                     && half_at.is_none_or(|at| i < at)
                     && (false == s.payload.is_empty()
-                        || (s.header.ack && i < previous_end && takes_ack(s, i)))
+                        || (s.header.ack && i < previous_end && takes_ack(s, i))
+                        || (s.header.fin && i < previous_end && takes_fin(s, i)))
             });
             if before_handshake && previous_visible {
                 return Some("C1 segments before the handshake");
