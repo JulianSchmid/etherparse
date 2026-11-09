@@ -2464,9 +2464,11 @@ mod test {
     /// client's ACKs captured too unless `one_direction`. With `wire_loss`,
     /// the network before the tap loses 10 in 1000 segments as well, the
     /// client's ACKs stay at the hole, and the server retransmits within a
-    /// window of [`pressure_window`]. With `pickup`, the capture starts at
-    /// the server's first segment, after the handshake, and the fallback
-    /// window is the window, as its doc advises. The `reader` must get every
+    /// window of [`pressure_window`]. With `pickup`, the capture starts
+    /// after the handshake, at the server's first segment or, with loss on
+    /// the wire, sometimes behind one the network lost and whose
+    /// retransmission it misses, and the fallback window is the window, as
+    /// its doc advises. The `reader` must get every
     /// captured byte and a gap for each run of lost segments, and no byte
     /// may be rejected: a reader stalled at a hole gets past it before the
     /// buffer is full (K4(d)). Returns true if a run of lost segments and the one
@@ -2504,10 +2506,16 @@ mod test {
         let mut retransmissions: Vec<(usize, usize)> = Vec::new();
         let retransmit_within = (window as usize / len).saturating_sub(1).max(1);
         let (mut acked, mut since_ack) = (0, 0);
+        // a pickup starts at its first segment, which the capture shows; with
+        // loss on the wire, it can start behind one the network lost and
+        // whose retransmission the capture misses, so the receiver's ACKs lie
+        // before the pickup's first byte until that retransmission comes
+        let behind = pickup && wire_loss && rng.chance(500);
+        let start = usize::from(behind);
         for i in 0..segments {
-            // a pickup starts at the first segment, which the capture shows
-            let first_of_pickup = pickup && 0 == i;
-            let lost = wire_loss && rng.chance(10) && false == first_of_pickup;
+            let first_of_pickup = pickup && start == i;
+            let lost =
+                (wire_loss && rng.chance(10) && false == first_of_pickup) || (behind && 0 == i);
             script.send(Responder, &data_of(i));
             if lost || (rng.chance(capture_loss) && false == first_of_pickup) {
                 script.segments.pop();
@@ -2515,15 +2523,22 @@ mod test {
                 shown[i] = true;
             }
             if lost {
-                let after = 1 + rng.below(retransmit_within as u64) as usize;
+                // the one a pickup starts behind comes last, so the
+                // receiver's ACKs lie before the pickup for a window
+                let after = if behind && 0 == i {
+                    retransmit_within
+                } else {
+                    1 + rng.below(retransmit_within as u64) as usize
+                };
                 retransmissions.push((i + after, i));
             } else {
                 received[i] = true;
             }
             // the retransmissions due, which the tap after the loss shows
+            // (but not one before a pickup's first segment)
             for &(_, j) in retransmissions.iter().filter(|(due, _)| *due == i) {
                 script.send_at(Responder, (j * len) as u64, &data_of(j));
-                if rng.chance(capture_loss) {
+                if rng.chance(capture_loss) || j < start {
                     script.segments.pop();
                 } else {
                     shown[j] = true;
@@ -2542,7 +2557,11 @@ mod test {
         }
         for &(_, j) in retransmissions.iter().filter(|(due, _)| *due >= segments) {
             script.send_at(Responder, (j * len) as u64, &data_of(j));
-            shown[j] = true;
+            if j < start {
+                script.segments.pop();
+            } else {
+                shown[j] = true;
+            }
         }
         script.ack(Initiator);
         script
@@ -2620,8 +2639,9 @@ mod test {
                 read(connection, server);
             }
         });
+        // a pickup's stream starts at its first segment
         let (mut expected, mut expected_gaps, mut missing) = (Vec::new(), Vec::new(), 0u64);
-        for (i, &shown) in shown.iter().enumerate() {
+        for (i, &shown) in shown.iter().enumerate().skip(start) {
             if shown {
                 if 0 < missing {
                     expected_gaps.push((expected.len(), Some(missing)));
@@ -2645,7 +2665,7 @@ mod test {
         // ACK covers a hole from capture loss within two segments, but a
         // hole from loss on the wire waits for the window (less than the
         // buffer less 64 KiB, see [`pressure_window`])
-        let longest_run = shown
+        let longest_run = shown[start..]
             .split(|shown| *shown)
             .map(<[bool]>::len)
             .max()
