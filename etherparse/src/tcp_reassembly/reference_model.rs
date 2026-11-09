@@ -1125,14 +1125,19 @@ impl ModelStream {
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
             // at most half of the stream's buffer, but never less than the
-            // receiver's window
+            // receiver's window and the byte that probes a closed one
             let distance = (u64::from(factor) * window)
                 .min(config.max_stream_buffer as u64 / 2)
-                .max(self.receiver_window().unwrap_or(0));
-            // what the capture showed of the sender, not what ACKs showed
+                .max(self.receiver_window().map_or(0, |window| window + 1));
+            // what the capture showed of the sender, not what ACKs showed,
+            // nor the bytes its SYN carried until later bytes pass them
             let sent = (self.bytes.len() as u64)
                 .max(self.rejected_end)
                 .max(self.fin_offset.unwrap_or(0));
+            // (from the true offset 0 on, so before the stream's start if
+            // the ACK number of a SYN-ACK gave it, A2)
+            let syn_end = self.base.map_or(0, |base| base.max(self.syn_len));
+            let sent = if sent > syn_end { sent } else { 0 };
             let implied_ack = sent.saturating_sub(distance);
             // it gives holes up after `ack_reorder_tolerance` packets, like
             // a seen ACK, and like one it counts only after offset 0

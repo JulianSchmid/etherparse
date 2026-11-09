@@ -1571,8 +1571,9 @@ impl TcpStream {
             // ACKed bytes keeps up before the buffer is full; never less than
             // the receiver's window though (a known one, or the fallback
             // window once the capture showed its ACKs), as the sender can
-            // have sent that far past the ACK
-            let known = self.receiver_window().unwrap_or(0);
+            // have sent that far past the ACK, and one byte more, with which
+            // a sender probes a closed window (RFC 9293 3.8.6.1)
+            let known = self.receiver_window().map_or(0, |window| window + 1);
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
@@ -1581,12 +1582,16 @@ impl TcpStream {
                 .max(known);
             // what the capture showed of the sender, not the bytes only ACKs
             // showed: a capture merged from two taps can show the ACKs long
-            // before the bytes, which K4(b) waits for
+            // before the bytes, which K4(b) waits for; the bytes its SYN
+            // carried (TCP Fast Open) need no ACK, so they show nothing until
+            // later bytes pass them
             let sent = self
                 .buffer
                 .received_end()
                 .max(self.rejected_end)
                 .max(self.fin_offset.unwrap_or(0));
+            let syn_end = self.syn.map_or(0, |syn| u64::from(syn.len));
+            let sent = if sent > syn_end { sent } else { 0 };
             let implied_ack = i64::try_from(sent)
                 .unwrap_or(i64::MAX)
                 .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
@@ -5273,11 +5278,12 @@ mod test {
 
         // the implied ACK: the sender sends at most one window after the
         // ACK, so the receiver ACKed the bytes up to the hole give up window
-        // factor times the window before the highest offset (it never moves
-        // back when the window grows, and a higher seen ACK counts)
+        // factor times the window before the highest offset, but at least a
+        // window and the byte that probes a closed one before it (it never
+        // moves back when the window grows, and a higher seen ACK counts)
         for (factor, expected) in [
             (Some(2), [0, 50, 50, 200]),
-            (Some(1), [50, 150, 150, 200]),
+            (Some(1), [49, 149, 149, 200]),
             (None, [0, 0, 0, 200]),
         ] {
             let config = TcpReassemblyConfig {

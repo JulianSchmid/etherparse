@@ -2323,6 +2323,57 @@ mod test {
             }
         }
 
+        // a sender's bytes imply only ACKs the receiver had to send first:
+        // the bytes its SYN carried (TCP Fast Open) need no ACK, and a sender
+        // probes a closed window with one byte past it (RFC 9293 3.8.6.1), so
+        // neither implies an ACK of itself (K2; regression test: the implied
+        // ACK exposed a probe byte, also once the receiver reset without
+        // taking it, and SYN bytes the receiver rejected)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // the SYN-ACK closes the window, and the client probes it
+            script.handshake().send(Initiator, b"x");
+            script.segments[1].header.window_size = 0;
+            // the server still expects the first byte, and resets
+            script.ack_to(Responder, 0).rst(Responder);
+            for segment in script.segments.iter_mut().skip(4) {
+                segment.header.window_size = 0;
+                segment.ack = Some(0);
+                segment.header.acknowledgment_number = 1001;
+            }
+            let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(
+                (0, TcpRead::Pending),
+                (stream.acked_offset(), stream.read_acked())
+            );
+            let mut connection = script.feed(&mut pool, 4..).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_acked());
+        }
+        for accepted in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // the SYN carries 1460 bytes, and the SYN-ACK, with a window of
+            // 512 bytes, ACKs them or only the SYN
+            let data = [42; 1460];
+            script.syn_with_data(&data).syn_ack();
+            script.segments[1].header.window_size = 512;
+            if false == accepted {
+                script.segments[1].ack = Some(0);
+                script.segments[1].header.acknowledgment_number = 1001;
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            let expected = if accepted {
+                TcpRead::Data(&data[..])
+            } else {
+                TcpRead::Pending
+            };
+            assert_eq!(expected, stream.read_acked(), "{accepted}");
+        }
+
         // a mid-stream pickup that starts behind a segment the network lost
         // before the tap, so the receiver's duplicate ACKs lie before its
         // first byte, or at a segment the network lost after the tap, so
