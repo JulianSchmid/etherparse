@@ -2323,6 +2323,79 @@ mod test {
             }
         }
 
+        // a mid-stream pickup that starts behind a segment the network lost
+        // before the tap, so the receiver's duplicate ACKs lie before its
+        // first byte, or at a segment the network lost after the tap, so
+        // they lie right at it: these ACKs don't count, but they show that
+        // the capture has the receiver's packets, so the fallback window,
+        // sized to the window, stands in for its window, and a hole whose
+        // retransmission comes within it waits for it, with both readers
+        // (regression test: only ACKs past the first byte switched the
+        // fallback window on, and the hole became a gap)
+        for (behind, acked) in [(true, false), (true, true), (false, false), (false, true)] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 1 << 20,
+                fallback_window: 640_000,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let data_of = |i: u64| [(i % 251) as u8; 1000];
+            // the receiver's ACKs stay at the first segment it lacks: the one
+            // before the capture's first, or that one
+            let lacks = if behind { 0 } else { 1000 };
+            script
+                .send_uncaptured(Responder, 1000)
+                .send(Responder, &data_of(1))
+                .ack_to(Initiator, lacks)
+                .send_uncaptured(Responder, 1000);
+            for i in 3..620 {
+                script.send(Responder, &data_of(i)).ack_to(Initiator, lacks);
+            }
+            // the retransmissions, within the window (the capture misses the
+            // one before its first segment)
+            if false == behind {
+                script.send_at(Responder, 1000, &data_of(1));
+            }
+            script
+                .send_at(Responder, 2000, &data_of(2))
+                .ack_to(Initiator, 620_000);
+            script.segments.drain(..3);
+            let (mut got, mut gaps) = (Vec::new(), Vec::new());
+            // the server's stream, as the pool names its role
+            let mut server = None;
+            for segment in &script.segments {
+                let (connection, role) = segment.feed(&mut pool, ()).active.unwrap();
+                if Responder == segment.sender {
+                    server = Some(role);
+                }
+                let stream = connection.stream_mut(server.unwrap());
+                loop {
+                    let read = if acked {
+                        stream.read_acked()
+                    } else {
+                        stream.read_received()
+                    };
+                    match read {
+                        TcpRead::Data(data) => {
+                            got.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            gaps.push(len);
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            let expected: Vec<u8> = (1..620).flat_map(data_of).collect();
+            assert_eq!(Vec::<Option<u64>>::new(), gaps, "{behind} {acked}");
+            assert!(expected == got, "{behind} {acked}");
+        }
+
         // the implied ACK lies at least the receiver's window behind the
         // bytes (K2), also on a mid-stream pickup, where the fallback window,
         // sized to the window, stands in for it once the receiver's ACKs

@@ -82,9 +82,10 @@ pub struct TcpReassemblyConfig {
     /// the receiver's ACK the first segment of a mid-stream pickup may lie
     /// (see
     /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
-    /// A pickup never shows the window scale, so once the receiver's ACKs
-    /// counted, this window also decides how far the implied ACK lies
-    /// behind the bytes and how long a hole the receiver lacks waits (see
+    /// A pickup never shows the window scale, so where the capture shows
+    /// the receiver's ACKs, this window also decides how far the implied
+    /// ACK lies behind the bytes and how long a hole the receiver lacks
+    /// waits (see
     /// [`crate::tcp_reassembly::TcpStream::holes`]). For captures that
     /// start mid-stream, size it above the bytes a connection can have in
     /// flight (see [`TcpReassemblyConfig::max_stream_buffer`]).

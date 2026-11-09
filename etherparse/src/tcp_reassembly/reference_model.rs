@@ -86,9 +86,12 @@ struct ModelStream {
     /// `max_stream_buffer`, which bounds how long the hole at the read
     /// offset waits (K4(d)).
     max_buffer: u64,
-    /// `fallback_window`, the receiver's window in K2 and K4(d) once its
-    /// ACKs counted while its window is unknown.
+    /// `fallback_window`, the receiver's window in K2 and K4(d) once the
+    /// capture showed its ACKs while its window is unknown.
     fallback_window: u64,
+    /// Whether the capture showed an ACK of the receiver, also one that
+    /// didn't count.
+    acks_captured: bool,
     /// Offset of the pool's offset 0 (`None` while the stream has no
     /// start).
     base: Option<u64>,
@@ -964,6 +967,7 @@ impl ModelStream {
     /// byte while bytes can be prepended, is kept and applied after every
     /// packet.
     fn add_ack(&mut self, ack: u64, window: u64, packet: u64, config: &TcpReassemblyConfig) {
+        self.acks_captured = true;
         let Some(base) = self.base else {
             self.kept_ack = Some((ack, packet));
             return;
@@ -1149,11 +1153,10 @@ impl ModelStream {
     }
 
     /// The receiver's window that K2 and K4(d) go by: the largest one it
-    /// advertised, or the fallback window once its ACKs counted.
+    /// advertised, or the fallback window once the capture showed its ACKs.
     fn receiver_window(&self) -> Option<u64> {
-        let acks_counted = self.base.is_some_and(|base| self.ack > base);
         self.largest_window
-            .or(acks_counted.then_some(self.fallback_window))
+            .or(self.acks_captured.then_some(self.fallback_window))
     }
 
     /// Gives up the hole at the read offset if it is overdue, or once the

@@ -22,8 +22,14 @@ pub struct TcpStream {
     max_buffer: u64,
 
     /// `fallback_window`, which stands in for the receiver's window in K2
-    /// and K4(d) once its ACKs counted while its window is unknown.
+    /// and K4(d) once the capture showed its ACKs while its window is
+    /// unknown.
     fallback_window: u64,
+
+    /// Whether the capture showed an ACK of the stream's receiver, also one
+    /// that didn't count (e.g. before the first byte of a mid-stream
+    /// pickup): its packets are captured (K2, K4(d)).
+    acks_captured: bool,
 
     /// Sequence number of the byte at offset 0 (`None` while the start of
     /// the stream is unknown).
@@ -172,6 +178,7 @@ impl TcpStream {
         TcpStream {
             max_buffer: config.max_stream_buffer as u64,
             fallback_window: u64::from(config.fallback_window),
+            acks_captured: false,
             start_seq: None,
             syn: None,
             kept_ack: None,
@@ -377,11 +384,11 @@ impl TcpStream {
     /// Receive window of the stream's receiver that K2's distance and K4(d)
     /// go by: the largest one it advertised, or, while its window is
     /// unknown (a mid-stream pickup shows no window scale), the fallback
-    /// window once its ACKs counted; `None` without either, as in a capture
-    /// of one direction.
+    /// window once the capture showed its ACKs; `None` without either, as
+    /// in a capture of one direction.
     fn receiver_window(&self) -> Option<u64> {
         self.largest_window
-            .or((0 < self.seen_ack).then_some(self.fallback_window))
+            .or(self.acks_captured.then_some(self.fallback_window))
     }
 
     /// Offset up to which the receiver must have ACKed the bytes (0 while no
@@ -1557,8 +1564,8 @@ impl TcpStream {
             // more than half of the stream's buffer, so that a reader of the
             // ACKed bytes keeps up before the buffer is full; never less than
             // the receiver's window though (a known one, or the fallback
-            // window once its ACKs counted), as the sender can have sent that
-            // far past the ACK
+            // window once the capture showed its ACKs), as the sender can
+            // have sent that far past the ACK
             let known = self.receiver_window().unwrap_or(0);
             let window = self
                 .largest_window
@@ -1618,6 +1625,7 @@ impl TcpStream {
         packet: u64,
         config: &TcpReassemblyConfig,
     ) {
+        self.acks_captured = true;
         let Some(start_seq) = self.start_seq else {
             self.kept_ack = Some(KeptAck {
                 seq: ack_seq,
