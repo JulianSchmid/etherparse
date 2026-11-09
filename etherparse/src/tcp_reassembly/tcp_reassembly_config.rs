@@ -1,16 +1,40 @@
 /// Configuration of a [`crate::tcp_reassembly::TcpReassemblyPool`].
 ///
-/// Start from the defaults and change what you need:
+/// Start from the defaults and change what you need, e.g. for connections
+/// with up to 512 KiB in flight:
 ///
 /// ```
 /// use etherparse::tcp_reassembly::TcpReassemblyConfig;
 ///
 /// let config = TcpReassemblyConfig {
 ///     max_stream_buffer: 1024 * 1024,
+///     fallback_window: 512 * 1024,
 ///     max_connections: Some(10_000),
 ///     ..Default::default()
 /// };
 /// ```
+///
+/// # Sizing
+///
+/// A stream buffers the bytes after a hole until the hole's
+/// retransmission comes, so size
+/// [`TcpReassemblyConfig::max_stream_buffer`] by the bytes a connection can
+/// have in flight (bandwidth times round-trip time, e.g. 10 Gbit/s ×
+/// 20 ms ≈ 25 MB):
+///
+/// - above them plus a burst of loss (a run of lost segments and the one
+///   after it, 64 KiB at least) where the capture has both directions;
+/// - above twice them where it has only the sender's packets;
+/// - for captures that start mid-stream (which don't show the window
+///   scale), also [`TcpReassemblyConfig::fallback_window`] above them, as
+///   it then stands in for the receiver's window.
+///
+/// Otherwise a lost segment whose retransmission arrives after a full
+/// window of bytes becomes a gap although it was captured, or the bytes
+/// after a burst of loss are rejected (see
+/// [`crate::tcp_reassembly::TcpStreamStatus::rejected_bytes`]).
+/// [`TcpReassemblyConfig::hole_give_up_window_factor`] doesn't change these
+/// sizes.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpReassemblyConfig {
     /// Maximum number of bytes a stream buffers, counted from its read
@@ -23,16 +47,8 @@ pub struct TcpReassemblyConfig {
     /// four times as much memory (see
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`]).
     ///
-    /// Size it above the bytes a connection can have in flight (bandwidth
-    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB) plus a burst
-    /// of loss (a run of lost segments and the one after it, 64 KiB at
-    /// least), and above twice those bytes for captures without the
-    /// receiver's packets. Otherwise a lost segment whose retransmission
-    /// arrives after a full window of bytes becomes a gap although the
-    /// retransmission was captured, or the bytes after a burst of loss are
-    /// rejected (see [`crate::tcp_reassembly::TcpStream::holes`]). For
-    /// captures that start mid-stream, size
-    /// [`TcpReassemblyConfig::fallback_window`] too.
+    /// Size it by the bytes a connection can have in flight (see
+    /// [sizing](TcpReassemblyConfig#sizing)).
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes before the furthest stored byte of a stream
@@ -61,9 +77,11 @@ pub struct TcpReassemblyConfig {
     /// works like `Some(1)`. The distance is at most half of
     /// [`TcpReassemblyConfig::max_stream_buffer`], so a reader of the ACKed
     /// bytes keeps up before the buffer is full, but never less than the
-    /// largest window the receiver advertised. So such a reader only keeps
-    /// up without captured ACKs if the buffer is clearly larger than that
-    /// window; otherwise the bytes that don't fit show up in
+    /// largest window the receiver advertised (or the fallback window that
+    /// stands in for it, see [`TcpReassemblyConfig::fallback_window`]). So
+    /// such a reader only keeps up without captured ACKs if the buffer is
+    /// clearly larger than that window; otherwise the bytes that don't fit
+    /// show up in
     /// [`crate::tcp_reassembly::TcpStreamStatus::rejected_bytes`].
     ///
     /// The same number of windows limits how far after the furthest received
@@ -78,17 +96,22 @@ pub struct TcpReassemblyConfig {
     /// This is the case if the handshake or the receiver's packets were not
     /// captured, and until the receiver's first window after its SYN if the
     /// connection scales its windows (a SYN's window is never scaled, so it
-    /// only bounds the later ones from below). It also decides how far from
-    /// the receiver's ACK the first segment of a mid-stream pickup may lie
-    /// (see
-    /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
-    /// A pickup never shows the window scale, so where the capture shows
-    /// the receiver's ACKs, this window also decides how far the implied
-    /// ACK lies behind the bytes and how long a hole the receiver lacks
-    /// waits (see
-    /// [`crate::tcp_reassembly::TcpStream::holes`]). For captures that
-    /// start mid-stream, size it above the bytes a connection can have in
-    /// flight (see [`TcpReassemblyConfig::max_stream_buffer`]).
+    /// only bounds the later ones from below). It has two roles:
+    ///
+    /// - how far after the bytes and ACKs the capture showed a segment is
+    ///   plausible, also the first one of a mid-stream pickup (see
+    ///   [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]),
+    ///   where a larger window accepts more;
+    /// - where the capture shows the receiver's ACKs but not its window
+    ///   scale (a mid-stream pickup), how far the implied ACK lies behind
+    ///   the bytes and how long a hole the receiver lacks waits (see
+    ///   [`crate::tcp_reassembly::TcpStream::holes`]), counted up to
+    ///   [`TcpReassemblyConfig::max_stream_buffer`] less 64 KiB, where a
+    ///   larger window costs buffer.
+    ///
+    /// For captures that start mid-stream, size it above the bytes a
+    /// connection can have in flight (see
+    /// [sizing](TcpReassemblyConfig#sizing)).
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an

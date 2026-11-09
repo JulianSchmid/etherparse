@@ -431,7 +431,9 @@ impl TcpStream {
     /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] times its
     /// largest window before the furthest byte or FIN the capture showed of
     /// the sender (at most half of [`TcpReassemblyConfig::max_stream_buffer`],
-    /// but never less than the largest window).
+    /// but never less than the largest window, or on a mid-stream pickup the
+    /// fallback window that stands in for it, see
+    /// [`TcpReassemblyConfig::fallback_window`]).
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
         self.seen_ack
