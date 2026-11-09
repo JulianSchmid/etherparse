@@ -2352,6 +2352,30 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_acked());
         }
+        // under a window scale, the SYN-ACK's window, which is never scaled,
+        // counts towards the largest window once a later window is known, as
+        // the client can have sent that far past the SYN's ACK (S3, K2;
+        // regression test: with a factor of 1, the server's first scaled
+        // window of 65,532 bytes, shown late on an ACK of the SYN only,
+        // implied an ACK of 2 of the client's 65,535 bytes)
+        {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: Some(1),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(2); 2];
+            script.window_size = 65535;
+            script.syn().syn_ack();
+            for chunk in [7; 65535].chunks(1460) {
+                script.send(Initiator, chunk);
+            }
+            script.window_size = 16383;
+            script.ack_to(Responder, 0);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).acked_offset());
+        }
         for accepted in [false, true] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);

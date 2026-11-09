@@ -223,11 +223,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.apply_kept_syn(syn, config, available, free);
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
-            let window = self
-                .stream(role.other())
-                .advertised_window(self.stream(role));
+            let receiver = self.stream(role.other());
+            let window = receiver.advertised_window(self.stream(role));
+            let syn_window = receiver.scaled_syn_window(self.stream(role));
             let packet = self.packets;
-            self.stream_mut(role).after_packet(window, packet, config);
+            self.stream_mut(role)
+                .after_packet(window, syn_window, packet, config);
         }
 
         // finished once both FINs were ACKed (F3)

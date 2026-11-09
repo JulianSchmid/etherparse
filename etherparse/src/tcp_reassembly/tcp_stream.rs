@@ -85,6 +85,10 @@ pub struct TcpStream {
     /// was a SYN (`None` before the sender's first segment).
     window: Option<(u16, bool)>,
 
+    /// "window" field of the sender's SYN, which is never scaled (`None`
+    /// before one, see [`TcpStream::scaled_syn_window`]).
+    syn_window: Option<u16>,
+
     /// The received bytes and the missing ones between them.
     buffer: StreamBuffer,
 
@@ -187,6 +191,7 @@ impl TcpStream {
             dropped: None,
             window_scale: None,
             window: None,
+            syn_window: None,
             buffer: StreamBuffer::new(free),
             fin_offset: None,
             seen_ack: 0,
@@ -832,6 +837,9 @@ impl TcpStream {
     /// window is known, as a retransmitted or late SYN carries the window
     /// from the start of the connection.
     fn record_window(&mut self, tcp: &TcpSlice<'_>) {
+        if tcp.syn() {
+            self.syn_window.get_or_insert(tcp.window_size());
+        }
         if tcp.syn() && self.window.is_some() {
             return;
         }
@@ -846,6 +854,20 @@ impl TcpStream {
         i64::try_from(self.highest_offset())
             .unwrap_or(i64::MAX)
             .saturating_sub(i64::try_from(range).unwrap_or(i64::MAX))
+    }
+
+    /// Receive window in bytes that the stream's sender advertised in its
+    /// SYN for the other stream `other` where a window scale makes it
+    /// unknown (S3, see [`TcpStream::advertised_window`]): the other side
+    /// can have sent that far past the SYN's ACK all the same (`None`
+    /// without such a SYN).
+    pub(crate) fn scaled_syn_window(&self, other: &TcpStream) -> Option<u64> {
+        match (self.syn_window, self.window_scale, other.window_scale) {
+            (Some(window), Some(Some(scale)), Some(Some(_))) if 0 < scale => {
+                Some(u64::from(window))
+            }
+            _ => None,
+        }
     }
 
     /// Receive window in bytes that the stream's sender advertised for the
@@ -1553,18 +1575,26 @@ impl TcpStream {
 
     /// Updates what the receiver must have received after the packet with
     /// the number `packet` of the connection, where `window` is the
-    /// receiver's receive window (`None` while it is unknown).
+    /// receiver's receive window (`None` while it is unknown) and
+    /// `syn_window` the window of its SYN that a scale makes unknown (see
+    /// [`TcpStream::scaled_syn_window`]).
     pub(crate) fn after_packet(
         &mut self,
         window: Option<u64>,
+        syn_window: Option<u64>,
         packet: u64,
         config: &TcpReassemblyConfig,
     ) {
         self.apply_kept_ack(window, config);
         self.apply_leading_ack(window, packet, config);
         // the sender can have sent bytes into a larger window before the
-        // window shrank (e.g. to 0 when the receiver's buffer is full)
+        // window shrank (e.g. to 0 when the receiver's buffer is full), also
+        // into the window of the receiver's SYN that a scale makes unknown,
+        // which counts once the window after it is known (S3)
         self.largest_window = self.largest_window.max(window);
+        if window.is_some() {
+            self.largest_window = self.largest_window.max(syn_window);
+        }
         if config.hole_give_up_window_factor.is_some() {
             // allow for several windows, as the window can change, but not
             // more than half of the stream's buffer, so that a reader of the
