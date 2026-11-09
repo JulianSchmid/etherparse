@@ -1422,19 +1422,26 @@ mod test {
             }
             // a new stream that begins right at the first byte or FIN of an
             // old pickup stream, whose SYN the pool didn't observe, looks
-            // like that stream's own late handshake
-            let old: Vec<&TestSegment> = captured
-                .iter()
-                .filter(|s| s.incarnation as usize + 1 == k)
-                .collect();
-            for role in [Initiator, Responder] {
-                let pickup_start = old
+            // like that stream's own late handshake; the tombstone of the
+            // connection before keeps the one it replaced too (C2)
+            for back in 1..=k.min(2) {
+                let older = &world.connections[k - back];
+                let old: Vec<&TestSegment> = captured
                     .iter()
-                    .find(|s| s.sender == role && (false == s.payload.is_empty() || s.header.fin))
-                    .map(|s| previous.seq(role, s.offset));
-                if false == observed_start(&old, role) && Some(script.seq(role, 0)) == pickup_start
-                {
-                    return Some("C1 coinciding start");
+                    .filter(|s| s.incarnation as usize + back == k)
+                    .collect();
+                for role in [Initiator, Responder] {
+                    let pickup_start = old
+                        .iter()
+                        .find(|s| {
+                            s.sender == role && (false == s.payload.is_empty() || s.header.fin)
+                        })
+                        .map(|s| older.seq(role, s.offset));
+                    if false == observed_start(&old, role)
+                        && Some(script.seq(role, 0)) == pickup_start
+                    {
+                        return Some("C1 coinciding start");
+                    }
                 }
             }
             // the first captured half of the new handshake meets the open
