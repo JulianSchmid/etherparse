@@ -2816,6 +2816,200 @@ mod test {
         );
     }
 
+    /// A world of [`window_census`]: what the client's SYN carries (TCP Fast
+    /// Open), and whether the server accepts it; the server's window at the
+    /// start and from the third round on; whether the capture shows the
+    /// server's first window after the SYN-ACK, on an ACK of the SYN only,
+    /// late, after the client's first burst; the window scale; the client's segments; the hole give up window factor;
+    /// and the chance in 1000 that the capture loses an ACK of the server.
+    #[derive(Clone, Copy, Debug)]
+    struct WindowWorld {
+        syn_len: usize,
+        accepted: bool,
+        initial: u32,
+        open: u32,
+        late_update: bool,
+        scale: Option<u8>,
+        len: usize,
+        segments: usize,
+        factor: Option<u32>,
+        ack_loss: u64,
+    }
+
+    /// Runs the transfer `world` from the client to the server in rounds.
+    /// In each, the client sends at most the window the server advertised
+    /// past its ACK (sending the SYN's bytes again if the server rejected
+    /// them), or probes a closed window with the one byte at the server's
+    /// ACK (RFC 9293 3.8.6.1), which the server drops; then the server ACKs
+    /// what it got.
+    /// After every packet, the ACKed offset of the client's stream may not
+    /// pass the server's true ACK, also one the capture lost (K2: the
+    /// implied ACK is one the receiver had to send), and a reader of the
+    /// ACKed bytes gets every byte by the end.
+    fn window_world(world: WindowWorld, rng: &mut Rng) -> Result<(), String> {
+        let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
+        script.window_scales = [world.scale; 2];
+        let total = (world.syn_len + world.segments * world.len) as u64;
+        let data = |from: u64, to: u64| -> Vec<u8> {
+            (from..to).map(|offset| (offset * 7 % 251) as u8).collect()
+        };
+        // a SYN's window is never scaled, a later one is
+        let field = |window: u32, syn: bool| -> u16 {
+            let shift = if syn { 0 } else { world.scale.unwrap_or(0) };
+            u16::try_from(window >> shift).unwrap_or(u16::MAX)
+        };
+        // the server's true ACK after each segment of the script
+        let mut truths = Vec::new();
+        script.window_size = u16::MAX;
+        script.syn_with_data(&data(0, world.syn_len as u64));
+        truths.push(0);
+        let mut acked = if world.accepted {
+            world.syn_len as u64
+        } else {
+            0
+        };
+        script.window_size = field(world.initial, true);
+        script.syn_ack();
+        let seq = script.seq(Initiator, acked);
+        let syn_ack = script.segments.last_mut().unwrap();
+        syn_ack.ack = Some(acked);
+        syn_ack.header.acknowledgment_number = seq;
+        truths.push(acked);
+        let (mut window, mut rounds) = (world.initial, 0);
+        // what the client knows of the window: the SYN-ACK's, which is never
+        // scaled, until the server's next ACK
+        let mut advertised = u32::from(field(world.initial, true));
+        // an ACK of the server; the capture keeps the last one, of every
+        // byte, and the one that opens the window: K2 goes by the windows
+        // the capture shows, so after a lost update the bytes sent into the
+        // opened window imply ACKs the server sends a round trip later (a
+        // known limit of K2)
+        let server_ack = |script: &mut ConnectionScript,
+                          truths: &mut Vec<u64>,
+                          acked: u64,
+                          window: u32,
+                          update: bool,
+                          rng: &mut Rng| {
+            script.window_size = field(window, false);
+            script.ack_to(Responder, acked);
+            if acked < total && false == update && rng.chance(world.ack_loss) {
+                script.segments.pop();
+            } else {
+                truths.push(acked);
+            }
+        };
+        while acked < total {
+            script.window_size = u16::MAX;
+            if 0 == advertised {
+                // a probe of the closed window, which the server drops
+                script.send_at(Initiator, acked, &data(acked, acked + 1));
+                truths.push(acked);
+            } else {
+                // a burst of up to a window past the server's ACK
+                let before = acked;
+                let mut next = acked;
+                while next < total && next < acked + u64::from(advertised) {
+                    let end = total
+                        .min(next + world.len as u64)
+                        .min(acked + u64::from(advertised));
+                    script.send_at(Initiator, next, &data(next, end));
+                    truths.push(acked);
+                    next = end;
+                }
+                acked = next;
+                // the server's ACK of the SYN only, sent before the burst
+                // arrived, with its first window after the SYN-ACK
+                if 0 == rounds && world.late_update {
+                    server_ack(&mut script, &mut truths, before, window, true, rng);
+                }
+            }
+            // the window opens after three rounds
+            rounds += 1;
+            if 3 == rounds {
+                window = world.open;
+            }
+            server_ack(&mut script, &mut truths, acked, window, 3 == rounds, rng);
+            advertised = u32::from(field(window, false)) << world.scale.unwrap_or(0);
+        }
+        // the truths of the lost ACKs' segments are gone with them
+        if truths.len() != script.segments.len() {
+            return Err(format!(
+                "{} truths for {} segments",
+                truths.len(),
+                script.segments.len()
+            ));
+        }
+        let config = TcpReassemblyConfig {
+            hole_give_up_window_factor: world.factor,
+            ..config()
+        };
+        let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+        let mut got = Vec::new();
+        for (i, (segment, truth)) in script.segments.iter().zip(&truths).enumerate() {
+            let processed = segment.feed(&mut pool, 1);
+            let Some((connection, _)) = processed.active else {
+                return Err(format!("packet {i}: no connection"));
+            };
+            let stream = connection.stream_mut(Initiator);
+            if stream.acked_offset() > *truth {
+                return Err(format!(
+                    "packet {i}: ACKed offset {} past the server's ACK {truth}",
+                    stream.acked_offset()
+                ));
+            }
+            loop {
+                match stream.read_acked() {
+                    TcpRead::Data(bytes) => {
+                        got.extend_from_slice(bytes);
+                        let len = bytes.len();
+                        stream.consume(len);
+                    }
+                    TcpRead::Gap { len } => return Err(format!("packet {i}: gap of {len:?}")),
+                    _ => break,
+                }
+            }
+        }
+        if got != data(0, total) {
+            return Err(format!("got {} of {total} bytes", got.len()));
+        }
+        Ok(())
+    }
+
+    /// A census of the receiver's window: SYNs with and without TCP Fast
+    /// Open bytes that the server accepts or rejects, windows that start
+    /// closed or small and open after probes, with and without a window
+    /// scale, a hole give up window factor of 1 or 2, and lost ACKs (see
+    /// [`window_world`]).
+    #[test]
+    fn window_census() {
+        let mut failures = Vec::new();
+        let seeds = proptest_cases() as u64;
+        for seed in 1..=seeds {
+            let mut rng = census_rng(seed);
+            let world = WindowWorld {
+                syn_len: [0, 0, 1, 100, 1460][rng.below(5) as usize],
+                accepted: rng.chance(500),
+                initial: [0, 1, 512, 4096, 65535][rng.below(5) as usize],
+                open: [512, 4096, 65535][rng.below(3) as usize],
+                late_update: rng.chance(500),
+                scale: [None, Some(2)][rng.below(2) as usize],
+                len: [536, 1460][rng.below(2) as usize],
+                segments: 20 + rng.below(100) as usize,
+                factor: [Some(1), Some(2)][rng.below(2) as usize],
+                ack_loss: [0, 100, 500][rng.below(3) as usize],
+            };
+            if let Err(failure) = window_world(world, &mut rng) {
+                failures.push(format!("seed {seed}, {world:?}: {failure}"));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{} of {seeds} transfers failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
+
     proptest! {
         /// Histories of two or three connections on one four-tuple with
         /// every reuse and close kind, captured with loss, either tap
