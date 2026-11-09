@@ -2280,7 +2280,8 @@ mod test {
         // the stream forward too: a segment after the run is lost if the
         // capture showed it only before the first such ACK after the first
         // segment after the run, and if the ACKs it showed before that
-        // segment lag more than k windows behind it
+        // segment lag more than k windows behind it (a run counts the
+        // segments the capture showed only later, too)
         let (mut first_shown, mut last_shown) = (vec![None; bulk.segments], vec![0; bulk.segments]);
         let (mut acks, mut highest_ack) = (Vec::new(), 0);
         for (index, (_, segment)) in events.iter().enumerate() {
@@ -2295,13 +2296,19 @@ mod test {
                 last_shown[i] = index;
             }
         }
-        let (mut run_start, mut lost_before) = (None, 0);
+        let mut lost_before = 0;
         for i in 0..bulk.segments {
             let Some(first) = first_shown[i] else {
-                run_start = run_start.or(Some(i));
                 continue;
             };
-            if let Some(start) = run_start.take() {
+            // the run of missing segments right before it, as the capture
+            // showed them by then: a retransmission the network delayed
+            // shows later
+            let run_start = (0..i)
+                .rev()
+                .take_while(|j| first_shown[*j].is_none_or(|shown| shown > first))
+                .last();
+            if let Some(start) = run_start {
                 let shown_ack = acks
                     .iter()
                     .take_while(|(index, _)| *index < first)
@@ -2437,10 +2444,31 @@ mod test {
     /// less: its ACK also waits at holes of the wire for their
     /// retransmissions (S4's known limit; two worlds of the census at
     /// `PROPTEST_RNG_SEED` 77002 and 77011, from before it had window growth
-    /// and reordering).
+    /// and reordering). And one whose burst is shorter than k windows, but
+    /// the segment after it, lost on the wire, shows only after the next
+    /// ones, which then lie after the window (world 2782 at 72002).
     #[test]
     fn bulk_ack_lag_at_holes() {
         let worlds = [
+            (
+                0x6420_45e2_ca80_5e70,
+                Bulk {
+                    segments: 499,
+                    len: 536,
+                    scale: None,
+                    window_field: 30000,
+                    wire_loss: 30,
+                    retransmit_after: 11,
+                    tap_before_loss: false,
+                    capture_loss: 0,
+                    lag: [181, 0],
+                    burst: Some((385, 111)),
+                    lag_from_start: true,
+                    client_closes_first: false,
+                    growth: None,
+                    reorder: None,
+                },
+            ),
             (
                 0xf6ea_7fc9_fe86_46ea,
                 Bulk {
