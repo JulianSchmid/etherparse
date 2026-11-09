@@ -162,10 +162,16 @@ pub(crate) struct World {
 
 impl World {
     /// Builds the world of `plans`, one connection each in order, with the
-    /// first connection's ISNs `isns`. `late_positions` are cycled to place
-    /// a connection's late segments among the next connection's first
-    /// segments (0 is before its SYN).
-    pub fn build(isns: [u32; 2], plans: &[ConnectionPlan], late_positions: &[usize]) -> World {
+    /// first connection's ISNs `isns` and the window scale `scale` of both
+    /// sides. `late_positions` are cycled to place a connection's late
+    /// segments among the next connection's first segments (0 is before its
+    /// SYN).
+    pub fn build(
+        isns: [u32; 2],
+        plans: &[ConnectionPlan],
+        late_positions: &[usize],
+        scale: Option<u8>,
+    ) -> World {
         let endpoints = [addr("10.0.0.1:50000"), addr("10.0.0.2:80")];
         let mut connections: Vec<ConnectionScript> = Vec::new();
         // the segments, each with whether a timeout comes before it
@@ -187,6 +193,7 @@ impl World {
             };
             let mut script = ConnectionScript::new(endpoints[0], endpoints[1], isns[0], isns[1]);
             script.incarnation = index as u32;
+            script.window_scales = [scale; 2];
             script.syn();
             // segments of the connection before that this handshake triggers
             let mut triggered: Vec<(TestSegment, usize)> = Vec::new();
@@ -1078,9 +1085,10 @@ mod test {
         plans: &[ConnectionPlan],
         late_positions: &[usize],
         capture: &Capture,
+        scale: Option<u8>,
         config: TcpReassemblyConfig,
     ) -> Result<Option<&'static str>, String> {
-        let world = World::build(isns, plans, late_positions);
+        let world = World::build(isns, plans, late_positions, scale);
         let captured = capture.apply(&world);
         if let Some(limit) = known_limit(&world, &captured, &config) {
             return Ok(Some(limit));
@@ -1127,7 +1135,7 @@ mod test {
                             };
                             let mut capture = Capture::default();
                             if let Some(role) = lost_half {
-                                let world = World::build(isns, &plans, &[late_position]);
+                                let world = World::build(isns, &plans, &[late_position], None);
                                 capture.lost = lost_half_of(1, role, &world);
                             }
                             if let Some((role, delay)) = lagging {
@@ -1148,7 +1156,8 @@ mod test {
                                         == matches!(close, Close::By(_) | Close::Simultaneous));
                             let allowed =
                                 (in_spans && 6 == variant).then_some("C1 new taken for old");
-                            match simulate(isns, &plans, &[late_position], &capture, config()) {
+                            match simulate(isns, &plans, &[late_position], &capture, None, config())
+                            {
                                 Ok(None) => {}
                                 Ok(limit) if limit == allowed => {}
                                 Ok(Some(limit)) => skipped.push(format!("{scenario}: {limit}")),
@@ -1245,7 +1254,17 @@ mod test {
         captured: &[TestSegment],
         config: &TcpReassemblyConfig,
     ) -> Option<&'static str> {
-        let range = u64::from(config.fallback_window)
+        // k windows: of the fallback window, or of the largest window the
+        // connections advertise if that is larger (a scaled window)
+        let window = world
+            .connections
+            .iter()
+            .map(|script| {
+                u64::from(script.window_size) << script.window_scales[0].unwrap_or(0).min(14)
+            })
+            .max()
+            .unwrap_or(0);
+        let range = u64::from(config.fallback_window).max(window)
             * u64::from(config.hole_give_up_window_factor.unwrap_or(2).max(1));
         if late_pickup_handshake(world, captured) {
             return Some("C1 late pickup handshake");
@@ -1883,7 +1902,7 @@ mod test {
         for case in 0..cases {
             let (isns, plans, late_positions, capture) =
                 strategy.new_tree(&mut runner).unwrap().current();
-            match simulate(isns, &plans, &late_positions, &capture, config()) {
+            match simulate(isns, &plans, &late_positions, &capture, None, config()) {
                 Ok(None) => {}
                 Ok(Some(limit)) => *hits.entry(limit).or_insert(0usize) += 1,
                 Err(failure) => failures.push(format!(
@@ -3042,7 +3061,7 @@ mod test {
         fn reconnect_histories(
             (isns, plans, late_positions, capture) in history_any(),
         ) {
-            if let Err(failure) = simulate(isns, &plans, &late_positions, &capture, config()) {
+            if let Err(failure) = simulate(isns, &plans, &late_positions, &capture, None, config()) {
                 let summary: Vec<_> = plans
                     .iter()
                     .map(|plan| (plan.reuse, plan.close, plan.last_ack_lost_on_wire, plan.in_flight_after_reset))
@@ -3051,6 +3070,26 @@ mod test {
                     false,
                     "plans (reuse, close, last ACK lost on wire, in flight) {:?}, late positions {:?}, capture {:?}\n{}",
                     summary, late_positions, capture, failure
+                );
+            }
+        }
+
+        /// The histories of [`reconnect_histories`] with scaled windows
+        /// (RFC 7323), which make a SYN's window unknown (S3).
+        #[test]
+        fn scaled_histories(
+            (isns, plans, late_positions, capture) in history_any(),
+            scale in prop_oneof![Just(2u8), Just(7u8)],
+        ) {
+            if let Err(failure) = simulate(isns, &plans, &late_positions, &capture, Some(scale), config()) {
+                let summary: Vec<_> = plans
+                    .iter()
+                    .map(|plan| (plan.reuse, plan.close, plan.last_ack_lost_on_wire, plan.in_flight_after_reset))
+                    .collect();
+                prop_assert!(
+                    false,
+                    "scale {}, plans (reuse, close, last ACK lost on wire, in flight) {:?}, late positions {:?}, capture {:?}\n{}",
+                    scale, summary, late_positions, capture, failure
                 );
             }
         }
