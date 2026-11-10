@@ -1,5 +1,7 @@
 use crate::icmpv6::NdpOptionType;
 
+mod dns_search_list_option_slice;
+pub use dns_search_list_option_slice::*;
 mod mtu_option_slice;
 pub use mtu_option_slice::*;
 
@@ -31,6 +33,8 @@ pub(super) const NDP_OPTION_HEADER_LEN: usize = 2;
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum NdpOptionSlice<'a> {
+    /// DNS search list option (type 31). Names are validated during iteration.
+    DnsSearchList(DnsSearchListOptionSlice<'a>),
     /// Source link-layer address option (type 1).
     SourceLinkLayerAddress(SourceLinkLayerAddressOptionSlice<'a>),
     /// Target link-layer address option (type 2).
@@ -49,6 +53,7 @@ impl<'a> NdpOptionSlice<'a> {
     /// Returns the serialized bytes of the option.
     pub fn as_bytes(&self) -> &'a [u8] {
         match self {
+            NdpOptionSlice::DnsSearchList(value) => value.as_bytes(),
             NdpOptionSlice::SourceLinkLayerAddress(value) => value.as_bytes(),
             NdpOptionSlice::TargetLinkLayerAddress(value) => value.as_bytes(),
             NdpOptionSlice::PrefixInformation(value) => value.as_bytes(),
@@ -61,6 +66,7 @@ impl<'a> NdpOptionSlice<'a> {
     /// Returns the option type value.
     pub fn option_type(&self) -> NdpOptionType {
         match self {
+            NdpOptionSlice::DnsSearchList(value) => value.option_type(),
             NdpOptionSlice::SourceLinkLayerAddress(value) => value.option_type(),
             NdpOptionSlice::TargetLinkLayerAddress(value) => value.option_type(),
             NdpOptionSlice::PrefixInformation(value) => value.option_type(),

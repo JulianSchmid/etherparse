@@ -19,6 +19,8 @@
 pub struct NdpOptionType(pub u8);
 
 impl NdpOptionType {
+    /// DNS Search List option \[[RFC8106](https://datatracker.ietf.org/doc/html/rfc8106#section-5.2)\].
+    pub const DNSSL: Self = Self(31);
     /// Source Link-Layer Address option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.1)\].
     pub const SOURCE_LINK_LAYER_ADDRESS: Self = Self(1);
     /// Target Link-Layer Address option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.1)\].
@@ -38,6 +40,7 @@ impl NdpOptionType {
             3 => Some("Prefix Information"),
             4 => Some("Redirected Header"),
             5 => Some("MTU"),
+            31 => Some("DNS Search List"),
             _ => None,
         }
     }
