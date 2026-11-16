@@ -10,6 +10,14 @@
     * New enum variants `TransportSlice::Igmp`, `TransportHeader::Igmp`, `PayloadSlice::Igmp` & `LaxPayloadSlice::Igmp`.
     * `SlicedPacket`, `LaxSlicedPacket`, `PacketHeaders` & `LaxPacketHeaders` now decode `ip_number::IGMP` payloads.
     * `PacketBuilder` gained `igmp` & `igmp_header` setters and `IgmpHeader::write`.
+* Added zero-copy MLD support (MLDv1 & MLDv2):
+  * `MldSlice`, an enum with one zero-copy variant per message type (`MulticastListenerQuery`, `MulticastListenerQueryWithSources`, `MulticastListenerReportV1`, `MulticastListenerReportV2`, `MulticastListenerDone` & `Unknown`), plus common accessors (`mld_type`, `type_u8`, `bytes5to8`, `fixed_payload_len`, `payload` & `slice`).
+  * MLD is carried within ICMPv6, so `MldSlice::from_slice` decodes an already parsed `Icmpv6Slice`: `MldSlice::from_slice(icmpv6.type_u8(), icmpv6.bytes5to8(), icmpv6.payload())`. Bytes 4-7 of the ICMPv6 header are MLD fields (`Maximum Response Delay`/`Maximum Response Code`, `Flags` & `Nr of Mcast Address Records`), which is why they are passed in alongside the payload. The checksum stays the ICMPv6 layer's concern (`Icmpv6Slice::is_checksum_valid`) and is not re-implemented for MLD.
+  * Per-variant slice types (`MulticastListenerQuerySlice`, `MulticastListenerQueryWithSourcesSlice`, `MulticastListenerReportV1Slice`, `MulticastListenerReportV2Slice`, `MulticastListenerDoneSlice` & `MldUnknownSlice`) with typed field accessors. Variable-length data is exposed where it exists: `MulticastListenerReportV2Slice::multicast_address_records` and `MulticastListenerQueryWithSourcesSlice::source_addresses` / `source_addrs_bytes`.
+  * `MulticastAddressRecordSlice` & `MulticastAddressRecordSliceIter` for iterating MLDv2 multicast address records (incl. typed `source_addresses`).
+  * `MldType` for the owned decoded representation (`MldSlice::mld_type`), with a `to_header` on every per-variant slice.
+  * New `mld` module with the supporting types (`MulticastAddress`, `MaxResponseCode`, `Qrv`, `MulticastAddressRecordType`, the per-message `*Type`/`*Header` structs & the `MLD*_TYPE_*` constants). Each message type carries both a `LEN` (complete MLD message length, incl. the 8 ICMPv6 header bytes) and a `PAYLOAD_LEN` (`LEN - 8`) constant.
+  * New `err::Layer::Mld` & `err::ValueType::MldQrv` variants.
 
 ## 0.15.0
 
