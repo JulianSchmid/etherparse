@@ -26,6 +26,14 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
         use ip_number::*;
         use Ipv6ExtensionSlice::*;
 
+        // `Ipv6ExtensionsSlice::from_slice_lax` keeps only the headers it
+        // could read completely, but the last of them can still name a
+        // following extension header. Stop once the checked bytes are used
+        // up instead of reading that header from an empty slice.
+        if self.rest.is_empty() {
+            return None;
+        }
+
         match self.next_header {
             // Note on the unsafe calls:
             //
@@ -81,7 +89,55 @@ mod test {
     use crate::ip_number::*;
     use crate::test_gens::*;
     use alloc::borrow::ToOwned;
+    use alloc::{vec, vec::Vec};
     use proptest::prelude::*;
+
+    #[test]
+    fn iter_stops_at_truncated_header_from_lax_slice() {
+        // A hop-by-hop header that announces a following header which
+        // from_slice_lax can't accept: one that is cut off, or a second
+        // hop-by-hop header (only allowed first). from_slice_lax keeps the
+        // first header and stops, so iterating must yield exactly that one
+        // header and then end.
+        for (next, tail) in [
+            (IPV6_HOP_BY_HOP, &[0u8; 8][..]),
+            (IPV6_ROUTE, &[][..]),
+            (IPV6_ROUTE, &[0u8, 1][..]),
+            (IPV6_DEST_OPTIONS, &[0u8; 7][..]),
+            (IPV6_FRAG, &[0u8; 3][..]),
+            (AUTH, &[0u8, 1, 0, 0][..]),
+        ] {
+            let mut data = vec![next.0, 0, 0, 0, 0, 0, 0, 0];
+            data.extend_from_slice(tail);
+            let (exts, _, _, err) = Ipv6ExtensionsSlice::from_slice_lax(IPV6_HOP_BY_HOP, &data);
+            assert!(err.is_some());
+            let headers: Vec<_> = exts.into_iter().collect();
+            assert_eq!(1, headers.len(), "next header {:?}, tail {:?}", next, tail);
+            assert!(matches!(headers[0], Ipv6ExtensionSlice::HopByHop(_)));
+        }
+    }
+
+    #[test]
+    fn iter_stops_at_truncated_header_from_lax_ipv6_slice() {
+        // The same situation reached through the public lax IPv6 parser, as
+        // with a captured packet whose extension headers are cut short.
+        let ext = [IPV6_ROUTE.0, 0, 0, 0, 0, 0, 0, 0];
+        let header = Ipv6Header {
+            traffic_class: 0,
+            flow_label: Default::default(),
+            payload_length: ext.len() as u16,
+            next_header: IPV6_HOP_BY_HOP,
+            hop_limit: 64,
+            source: [0; 16],
+            destination: [0; 16],
+        };
+        let mut packet = header.to_bytes().to_vec();
+        packet.extend_from_slice(&ext);
+
+        let (ipv6, err) = crate::LaxIpv6Slice::from_slice(&packet).unwrap();
+        assert!(err.is_some());
+        assert_eq!(1, ipv6.extensions().clone().into_iter().count());
+    }
 
     #[test]
     fn into_iter() {
