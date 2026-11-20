@@ -9,6 +9,9 @@ pub use ndp_option_header::*;
 mod prefix_information_option_slice;
 pub use prefix_information_option_slice::*;
 
+mod recursive_dns_server_option_slice;
+pub use recursive_dns_server_option_slice::*;
+
 mod redirected_header_option_slice;
 pub use redirected_header_option_slice::*;
 
@@ -37,6 +40,8 @@ pub enum NdpOptionSlice<'a> {
     TargetLinkLayerAddress(TargetLinkLayerAddressOptionSlice<'a>),
     /// Prefix information option (type 3).
     PrefixInformation(PrefixInformationOptionSlice<'a>),
+    /// Recursive DNS Server option (type 25).
+    RecursiveDns(RecursiveDnsServerOptionSlice<'a>),
     /// Redirected header option (type 4).
     RedirectedHeader(RedirectedHeaderOptionSlice<'a>),
     /// MTU option (type 5).
@@ -52,6 +57,7 @@ impl<'a> NdpOptionSlice<'a> {
             NdpOptionSlice::SourceLinkLayerAddress(value) => value.as_bytes(),
             NdpOptionSlice::TargetLinkLayerAddress(value) => value.as_bytes(),
             NdpOptionSlice::PrefixInformation(value) => value.as_bytes(),
+            NdpOptionSlice::RecursiveDns(value) => value.as_bytes(),
             NdpOptionSlice::RedirectedHeader(value) => value.as_bytes(),
             NdpOptionSlice::Mtu(value) => value.as_bytes(),
             NdpOptionSlice::Unknown(value) => value.as_bytes(),
@@ -64,6 +70,7 @@ impl<'a> NdpOptionSlice<'a> {
             NdpOptionSlice::SourceLinkLayerAddress(value) => value.option_type(),
             NdpOptionSlice::TargetLinkLayerAddress(value) => value.option_type(),
             NdpOptionSlice::PrefixInformation(value) => value.option_type(),
+            NdpOptionSlice::RecursiveDns(value) => value.option_type(),
             NdpOptionSlice::RedirectedHeader(value) => value.option_type(),
             NdpOptionSlice::Mtu(value) => value.option_type(),
             NdpOptionSlice::Unknown(value) => value.option_type(),

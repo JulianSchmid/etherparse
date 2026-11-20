@@ -27,6 +27,8 @@ impl NdpOptionType {
     pub const PREFIX_INFORMATION: Self = Self(3);
     /// Redirected Header option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.3)\].
     pub const REDIRECTED_HEADER: Self = Self(4);
+    /// Recursive DNS Server option \[[RFC8106](https://datatracker.ietf.org/doc/html/rfc8106#section-5.1)\].
+    pub const RDNSS: Self = Self(25);
     /// MTU option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.4)\].
     pub const MTU: Self = Self(5);
 
@@ -38,6 +40,7 @@ impl NdpOptionType {
             3 => Some("Prefix Information"),
             4 => Some("Redirected Header"),
             5 => Some("MTU"),
+            25 => Some("Recursive DNS Server"),
             _ => None,
         }
     }
