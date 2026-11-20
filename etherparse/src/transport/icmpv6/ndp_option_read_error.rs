@@ -12,7 +12,7 @@ pub enum NdpOptionReadError {
     },
     /// An ND option with a length value of zero was encountered.
     ZeroLength { option_id: NdpOptionType },
-    /// The option has a fixed encoded size and the received size differs.
+    /// The received option size does not match the expected size.
     UnexpectedSize {
         option_id: NdpOptionType,
         expected_size: usize,
@@ -25,6 +25,8 @@ pub enum NdpOptionReadError {
         expected_length_units: u8,
         actual_length_units: u8,
     },
+    /// A Route Information option advertises a prefix longer than 128 bits.
+    InvalidRoutePrefixLength { prefix_length: u8 },
 }
 
 impl core::fmt::Display for NdpOptionReadError {
@@ -62,6 +64,10 @@ impl core::fmt::Display for NdpOptionReadError {
                 expected_length_units,
                 actual_option_id.0,
                 actual_length_units,
+            ),
+            InvalidRoutePrefixLength { prefix_length } => write!(
+                f,
+                "NDP option error: Route prefix length {prefix_length} exceeds 128 bits.",
             ),
         }
     }

@@ -27,6 +27,8 @@ impl NdpOptionType {
     pub const PREFIX_INFORMATION: Self = Self(3);
     /// Redirected Header option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.3)\].
     pub const REDIRECTED_HEADER: Self = Self(4);
+    /// Route Information option \[[RFC4191](https://datatracker.ietf.org/doc/html/rfc4191#section-2.3)\].
+    pub const ROUTE_INFORMATION: Self = Self(24);
     /// MTU option \[[RFC4861](https://datatracker.ietf.org/doc/html/rfc4861#section-4.6.4)\].
     pub const MTU: Self = Self(5);
 
@@ -38,6 +40,7 @@ impl NdpOptionType {
             3 => Some("Prefix Information"),
             4 => Some("Redirected Header"),
             5 => Some("MTU"),
+            24 => Some("Route Information"),
             _ => None,
         }
     }
