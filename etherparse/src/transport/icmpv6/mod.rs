@@ -24,6 +24,9 @@ pub use ndp_option::*;
 mod ndp_option_read_error;
 pub use ndp_option_read_error::*;
 
+mod dns_name_read_error;
+pub use dns_name_read_error::*;
+
 mod ndp_options_iterator;
 pub use ndp_options_iterator::*;
 
