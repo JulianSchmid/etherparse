@@ -26,6 +26,11 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
         use ip_number::*;
         use Ipv6ExtensionSlice::*;
 
+        // early return in case lax parsing has cut off early
+        if self.rest.is_empty() {
+            return None;
+        }
+
         match self.next_header {
             // Note on the unsafe calls:
             //
@@ -182,6 +187,24 @@ mod test {
                 }
             }
         }
+    }
+
+    /// An `Ipv6ExtensionsSlice` from `from_slice_lax` can end with a "next
+    /// header" pointing outside the slice, the iterator must stop there.
+    #[test]
+    fn next_stops_at_end_of_lax_slice() {
+        // 8 zero bytes form a complete hop-by-hop header whose "next header"
+        // is again hop-by-hop (ip number 0), so lax parsing accepts the
+        // header and then stops with a `HopByHopNotAtStart` error.
+        let data = [0u8; 8];
+        let (exts, _, _, err) =
+            Ipv6ExtensionsSlice::from_slice_lax(IpNumber::IPV6_HEADER_HOP_BY_HOP, &data);
+        assert!(err.is_some());
+        assert_eq!(exts.slice().len(), 8);
+
+        let mut iter = exts.into_iter();
+        assert!(matches!(iter.next(), Some(Ipv6ExtensionSlice::HopByHop(_))));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
