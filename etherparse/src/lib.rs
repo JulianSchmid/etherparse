@@ -20,7 +20,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! etherparse = "0.21.0"
+//! etherparse = "0.21.1"
 //! ```
 //!
 //! # What is etherparse?
