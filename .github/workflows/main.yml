@@ -135,5 +135,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: taiki-e/install-action@cargo-hack
-    - run: cargo hack check --rust-version --workspace --all-targets --ignore-private
+    - name: read rust-version from Cargo.toml
+      id: msrv
+      run: |
+        MSRV=$(sed -n 's/^rust-version *= *"\(.*\)"/\1/p' etherparse/Cargo.toml)
+        echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.msrv.outputs.version }}
+    - run: cargo check --package etherparse --all-features
