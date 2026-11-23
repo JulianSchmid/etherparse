@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+* Added support for unknown TCP options:
+  * `TcpOptionSlice`, a zero-copy view of a single TCP option of any kind (`kind`, `len`, `data`, `slice`, `kind_name`, `to_element`) with a generic `Display` implementation (e.g. `kind=34 (TCP Fast Open Cookie) len=6 data=0x01020304`).
+  * `TcpOptionsRawIterator`, which iterates over all TCP options and skips unknown kinds via their length octet instead of stopping, accessible via `TcpOptions::raw_iter`, `TcpHeader::options_raw_iterator`, `TcpHeaderSlice::options_raw_iterator` & `TcpSlice::options_raw_iterator`.
+  * `tcp_option::KIND_*` & `tcp_option::LEN_*` constants for all option kinds in the IANA registry and `tcp_option::kind_name`, which returns the IANA registered meaning of a kind.
 * Added zero-copy IGMP support (IGMPv1, IGMPv2 & IGMPv3):
   * `IgmpSlice`, an enum with one zero-copy variant per message type (`MembershipQuery`, `MembershipQueryWithSources`, `MembershipReportV1`, `MembershipReportV2`, `MembershipReportV3`, `LeaveGroup` & `Unknown`), plus common accessors (`header`, `payload`, `slice`, `checksum`, `is_checksum_valid`).
   * Per-variant slice types (`MembershipQuerySlice`, `MembershipQueryWithSourcesSlice`, `MembershipReportV1Slice`, `MembershipReportV2Slice`, `MembershipReportV3Slice`, `LeaveGroupSlice` & `IgmpUnknownSlice`) with typed field accessors. Variable-length data is exposed where it exists: `MembershipReportV3Slice::group_records` and `MembershipQueryWithSourcesSlice::source_addresses` / `source_addrs_bytes` (no longer `Option`-returning).

@@ -52,6 +52,9 @@ pub use tcp_option_impl::*;
 mod tcp_option_read_error;
 pub use tcp_option_read_error::*;
 
+mod tcp_option_slice;
+pub use tcp_option_slice::*;
+
 mod tcp_option_write_error;
 pub use tcp_option_write_error::*;
 
@@ -60,6 +63,9 @@ pub use tcp_options::*;
 
 mod tcp_options_iterator;
 pub use tcp_options_iterator::*;
+
+mod tcp_options_raw_iterator;
+pub use tcp_options_raw_iterator::*;
 
 mod tcp_slice;
 pub use tcp_slice::*;

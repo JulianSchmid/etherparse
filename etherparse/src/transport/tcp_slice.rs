@@ -313,6 +313,13 @@ impl<'a> TcpSlice<'a> {
         TcpOptionsIterator::from_slice(self.options())
     }
 
+    /// Returns an iterator over all TCP header options (known & unknown
+    /// kinds) as zero-copy [`TcpOptionSlice`]s.
+    #[inline]
+    pub fn options_raw_iterator(&self) -> TcpOptionsRawIterator<'_> {
+        TcpOptionsRawIterator::from_slice(self.options())
+    }
+
     /// Decode all the fields and copy the results to a
     /// [`crate::TcpHeader`]` struct.
     pub fn to_header(&self) -> TcpHeader {
@@ -550,6 +557,7 @@ mod test {
             assert_eq!(slice.urgent_pointer(), tcp.urgent_pointer);
             assert_eq!(slice.options(), tcp.options.as_slice());
             assert_eq!(slice.options_iterator(), tcp.options_iterator());
+            assert_eq!(slice.options_raw_iterator(), tcp.options_raw_iterator());
             assert_eq!(slice.to_header(), tcp);
         }
     }

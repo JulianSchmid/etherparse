@@ -1,4 +1,7 @@
-use crate::{tcp_option, TcpHeader, TcpOptionElement, TcpOptionWriteError, TcpOptionsIterator};
+use crate::{
+    tcp_option, TcpHeader, TcpOptionElement, TcpOptionWriteError, TcpOptionsIterator,
+    TcpOptionsRawIterator,
+};
 
 /// Options present in a TCP header.
 ///
@@ -461,6 +464,37 @@ impl TcpOptions {
             options: self.as_slice(),
         }
     }
+
+    /// Returns an iterator over all options (including kinds that
+    /// [`TcpOptionElement`] cannot represent) as zero-copy [`crate::TcpOptionSlice`]s.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use etherparse::{tcp_option, TcpOptions};
+    ///
+    /// let options = TcpOptions::try_from_slice(&[
+    ///     tcp_option::KIND_MULTIPATH, 4, 0, 0x81,
+    ///     tcp_option::KIND_WINDOW_SCALE, 3, 7,
+    ///     tcp_option::KIND_END,
+    /// ]).unwrap();
+    ///
+    /// let formatted: Vec<String> = options
+    ///     .raw_iter()
+    ///     .map(|o| o.unwrap().to_string())
+    ///     .collect();
+    /// assert_eq!(
+    ///     formatted,
+    ///     [
+    ///         "kind=30 (Multipath TCP (MPTCP)) len=4 data=0x0081",
+    ///         "kind=3 (Window Scale) len=3 data=0x07",
+    ///     ]
+    /// );
+    /// ```
+    #[inline]
+    pub fn raw_iter(&self) -> TcpOptionsRawIterator<'_> {
+        TcpOptionsRawIterator::from_slice(self.as_slice())
+    }
 }
 
 impl Default for TcpOptions {
@@ -685,6 +719,15 @@ mod test {
         let r = options.as_mut_slice();
         r[0] = 5;
         assert_eq!(options.as_slice(), &[5, 2, 3, 4][..]);
+    }
+
+    #[test]
+    fn raw_iter() {
+        let options = TcpOptions::from([1, 2, 3, 4]);
+        assert_eq!(
+            options.raw_iter(),
+            TcpOptionsRawIterator::from_slice(&[1, 2, 3, 4][..])
+        );
     }
 
     #[test]

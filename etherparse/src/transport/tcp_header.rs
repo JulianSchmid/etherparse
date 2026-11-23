@@ -206,6 +206,13 @@ impl TcpHeader {
         self.options.elements_iter()
     }
 
+    /// Returns an iterator over all TCP header options (known & unknown
+    /// kinds) as zero-copy [`TcpOptionSlice`]s.
+    #[inline]
+    pub fn options_raw_iterator(&self) -> TcpOptionsRawIterator<'_> {
+        self.options.raw_iter()
+    }
+
     /// Renamed to `TcpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Use TcpHeader::from_slice instead.")]
     #[inline]
@@ -1346,6 +1353,32 @@ mod test {
                 .options_iterator()
                 .map(|x| x.unwrap())
                 .collect::<Vec<TcpOptionElement>>()[..]
+        );
+    }
+
+    #[test]
+    fn options_raw_iterator() {
+        use tcp_option::*;
+        let mut header: TcpHeader = Default::default();
+        header
+            .set_options_raw(&[
+                KIND_FAST_OPEN_COOKIE,
+                6,
+                1,
+                2,
+                3,
+                4,
+                KIND_WINDOW_SCALE,
+                3,
+                7,
+            ])
+            .unwrap();
+        assert_eq!(
+            [KIND_FAST_OPEN_COOKIE, KIND_WINDOW_SCALE][..],
+            header
+                .options_raw_iterator()
+                .map(|x| x.unwrap().kind())
+                .collect::<Vec<u8>>()[..]
         );
     }
 
