@@ -1,6 +1,6 @@
 [package]
 name = "etherparse_proptest_generators"
-version = "0.20.3"
+version = "0.20.4"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 edition = "2021"
 repository = "https://github.com/JulianSchmid/etherparse"
