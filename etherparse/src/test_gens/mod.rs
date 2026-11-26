@@ -924,3 +924,173 @@ prop_compose! {
         Icmpv6Header::from_slice(&bytes).unwrap().0
     }
 }
+
+prop_compose! {
+    pub fn vlan_ids_any()
+        (vlan_ids in proptest::collection::vec(vlan_id_any(), 0..=3))
+        -> arrayvec::ArrayVec<VlanId, 3>
+    {
+        vlan_ids.into_iter().collect()
+    }
+}
+
+pub fn ip_addr_any() -> impl Strategy<Value = core::net::IpAddr> {
+    prop_oneof![
+        any::<[u8; 4]>().prop_map(core::net::IpAddr::from),
+        any::<[u8; 16]>().prop_map(core::net::IpAddr::from),
+    ]
+}
+
+prop_compose! {
+    pub fn socket_addr_any()
+        (ip in ip_addr_any(), port in any::<u16>())
+        -> core::net::SocketAddr
+    {
+        core::net::SocketAddr::new(ip, port)
+    }
+}
+
+/// TCP initial sequence numbers, often within 2^16 of 2^32 so that the
+/// sequence numbers of a connection wrap around.
+pub fn tcp_isn_any() -> impl Strategy<Value = u32> {
+    prop_oneof![
+        any::<u32>(),
+        (u32::MAX - 0xffff)..=u32::MAX,
+        (u32::MAX - 0x1fff)..=u32::MAX,
+    ]
+}
+
+/// Bytes of a TCP stream with a length below `max_len`.
+///
+/// The bytes come from a pseudo-random generator, which is a lot faster
+/// than generating each byte with proptest.
+pub fn stream_data_any(max_len: usize) -> impl Strategy<Value = std::vec::Vec<u8>> {
+    (0..max_len, any::<u64>()).prop_map(|(len, seed)| {
+        let mut state = seed;
+        (0..len)
+            .map(|_| {
+                // linear congruential generator (Knuth's MMIX constants)
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (state >> 56) as u8
+            })
+            .collect()
+    })
+}
+
+#[cfg(feature = "std")]
+pub fn tcp_role_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpRole> {
+    use crate::tcp_reassembly::TcpRole;
+    prop_oneof![Just(TcpRole::Initiator), Just(TcpRole::Responder)]
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_connection_id_any()
+        (value in any::<u64>())
+        -> crate::tcp_reassembly::TcpConnectionId
+    {
+        crate::tcp_reassembly::TcpConnectionId(value)
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_connection_key_any()
+        (
+            vlan_ids in vlan_ids_any(),
+            a in socket_addr_any(),
+            b in socket_addr_any(),
+            channel_id in any::<u32>(),
+        )
+        -> crate::tcp_reassembly::TcpConnectionKey<u32>
+    {
+        crate::tcp_reassembly::TcpConnectionKey::new(vlan_ids, a, b, channel_id)
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    /// Default configurations of a
+    /// [`crate::tcp_reassembly::TcpReassemblyPool`] with small values for the
+    /// settings that make holes overdue.
+    pub fn tcp_overdue_config_any()
+        (
+            hole_give_up_window_factor in proptest::option::of(1u32..4),
+            ack_reorder_tolerance in 0u32..24,
+        )
+        -> crate::tcp_reassembly::TcpReassemblyConfig
+    {
+        crate::tcp_reassembly::TcpReassemblyConfig {
+            hole_give_up_window_factor,
+            ack_reorder_tolerance,
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_reassembly_config_any()
+        (
+            max_stream_buffer in any::<usize>(),
+            max_holes_per_stream in any::<usize>(),
+            hole_give_up_window_factor in proptest::option::of(any::<u32>()),
+            fallback_window in any::<u32>(),
+            ack_reorder_tolerance in any::<u32>(),
+            resync_after_segments in proptest::option::of(any::<u32>()),
+            max_connections in proptest::option::of(any::<usize>()),
+            max_total_buffered in proptest::option::of(any::<usize>()),
+            max_pooled_buffers in any::<usize>(),
+            max_pooled_buffer_capacity in any::<usize>(),
+        )
+        -> crate::tcp_reassembly::TcpReassemblyConfig
+    {
+        crate::tcp_reassembly::TcpReassemblyConfig {
+            max_stream_buffer,
+            max_holes_per_stream,
+            hole_give_up_window_factor,
+            fallback_window,
+            ack_reorder_tolerance,
+            resync_after_segments,
+            max_connections,
+            max_total_buffered,
+            max_pooled_buffers,
+            max_pooled_buffer_capacity,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+pub fn tcp_stream_start_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpStreamStart> {
+    use crate::tcp_reassembly::TcpStreamStart;
+    prop_oneof![
+        Just(TcpStreamStart::Observed),
+        Just(TcpStreamStart::MidStreamPickup)
+    ]
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_stream_status_any()
+        (
+            start in tcp_stream_start_any(),
+            gaps in any::<u64>(),
+            gap_bytes in any::<u64>(),
+            resyncs in any::<u64>(),
+            conflicting_retransmissions in any::<u64>(),
+            out_of_window_segments in any::<u64>(),
+        )
+        -> crate::tcp_reassembly::TcpStreamStatus
+    {
+        crate::tcp_reassembly::TcpStreamStatus {
+            start,
+            gaps,
+            gap_bytes,
+            resyncs,
+            conflicting_retransmissions,
+            out_of_window_segments,
+        }
+    }
+}

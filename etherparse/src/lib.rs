@@ -341,6 +341,11 @@ pub mod io;
 mod transport;
 pub use transport::*;
 
+/// Module containing a pool to re-assemble the byte streams of TCP connections (contains allocations).
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+pub mod tcp_reassembly;
+
 /// Helpers for calculating checksums.
 pub mod checksum;
 
