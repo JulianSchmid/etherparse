@@ -118,9 +118,8 @@ impl IpDefragBuf {
             {
                 return Err(AllocationFailure { len: required_len });
             }
-            unsafe {
-                self.data.set_len(required_len);
-            }
+            // zero fill so gaps never expose uninitialized or stale bytes
+            self.data.resize(required_len, 0);
         }
 
         // insert new data
@@ -383,6 +382,19 @@ mod test {
                     &sequence(16,16)
                 ).unwrap_err()
             );
+        }
+
+        // gaps before a fragment are zeroed, even if the reused
+        // data buffer held bytes from an earlier packet
+        {
+            let mut buffer = IpDefragBuf::new(IpNumber::UDP, vec![0xff; 64], Vec::new());
+            buffer.add(
+                IpFragOffset::try_new(32/8).unwrap(),
+                true,
+                &sequence(32,16)
+            ).unwrap();
+            assert_eq!(&buffer.data()[..32], &[0u8; 32]);
+            assert_eq!(&buffer.data()[32..], &sequence(32,16)[..]);
         }
     }
 }
